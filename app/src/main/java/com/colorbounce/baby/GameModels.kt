@@ -15,6 +15,14 @@ data class GameShape(
     val height: Float,
     val vx: Float,
     val vy: Float,
-    val color: Color,
+    /** Current hue in degrees; ping-pong animation runs only while this shape is actively held. */
+    val hue: Float,
+    /** +1 toward 360°, -1 toward 0°; updated by [ShapeColorAnimator.stepHuePingPong]. */
+    val hueSweepDirection: Float,
+    val saturation: Float,
+    val value: Float,
     val lastInteractionMillis: Long
 )
+
+val GameShape.color: Color
+    get() = Color.hsv(hue.normalizeHue(), saturation.coerceIn(0f, 1f), value.coerceIn(0f, 1f))

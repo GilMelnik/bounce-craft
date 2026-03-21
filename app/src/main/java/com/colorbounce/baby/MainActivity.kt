@@ -3,6 +3,7 @@ package com.colorbounce.baby
 import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -13,6 +14,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,10 +27,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonColors
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,7 +49,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -70,13 +76,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         settingsRepository = SettingsRepository(this)
         enableEdgeToEdge()
 
         setContent {
-            MaterialTheme {
+            val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(AppSettings())
+            ColorBounceTheme(themeMode = settings.themeMode) {
                 val navController = rememberNavController()
-                val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(AppSettings())
                 ColorBounceApp(
                     navController = navController,
                     settings = settings,
@@ -182,16 +189,32 @@ private fun ColorBounceApp(
 
 @Composable
 private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
-    Surface(modifier = Modifier.fillMaxSize()) {
+    // Surface sets LocalContentColor to onBackground for default text (light + dark).
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = MaterialTheme.colorScheme.background,
+        contentColor = MaterialTheme.colorScheme.onBackground
+    ) {
         Column(
             modifier = Modifier.fillMaxSize().padding(24.dp),
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Button(modifier = Modifier.width(220.dp), onClick = onPlay) { Text("Play") }
+            Button(
+                modifier = Modifier.width(220.dp),
+                onClick = onPlay,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) { Text("Play") }
             Button(
                 modifier = Modifier.width(220.dp).padding(top = 16.dp),
-                onClick = onSettings
+                onClick = onSettings,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                )
             ) { Text("Settings") }
         }
     }
@@ -201,6 +224,8 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
 private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: () -> Unit) {
     val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
     var startPoint by remember { mutableStateOf(Offset.Zero) }
+    val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
+    val exitButtonBg = MaterialTheme.colorScheme.surfaceVariant
 
     LaunchedEffect(settings.shapeTimeoutSeconds, settings.maxShapes) {
         var last = 0L
@@ -217,11 +242,12 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         }
     }
 
+    // Use theme background; avoid hardcoded colors so dark/light stay readable.
     Box(
         modifier = Modifier
             .fillMaxSize()
             .testTag(GAME_SURFACE_TAG)
-            .background(Color.Black)
+            .background(MaterialTheme.colorScheme.background)
             .onSizeChanged { viewModel.setScreenSize(it.width.toFloat(), it.height.toFloat()) }
             .pointerInput(settings.shapeMode, settings.maxShapes) {
                 detectDragGestures(
@@ -268,19 +294,19 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                 .align(Alignment.TopEnd)
                 .zIndex(10f)
                 .testTag(EXIT_BUTTON_TAG)
-                .background(Color(0x88FFFFFF), CircleShape)
+                .background(exitButtonBg, CircleShape)
                 .clickable { onExit() },
             contentAlignment = Alignment.Center
         ) {
             Canvas(Modifier.size(18.dp)) {
                 drawLine(
-                    color = Color.Black,
+                    color = onSurfaceVariant,
                     start = Offset(0f, 0f),
                     end = Offset(size.width, size.height),
                     strokeWidth = 3f
                 )
                 drawLine(
-                    color = Color.Black,
+                    color = onSurfaceVariant,
                     start = Offset(size.width, 0f),
                     end = Offset(0f, size.height),
                     strokeWidth = 3f
@@ -294,66 +320,163 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
 private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    Column(
-        modifier = Modifier.fillMaxSize().padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val scheme = MaterialTheme.colorScheme
+    val scroll = rememberScrollState()
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = scheme.background,
+        contentColor = scheme.onBackground
     ) {
-        Text("Settings", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Column(
+            modifier = Modifier
+                .verticalScroll(scroll)
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                "Settings",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = scheme.onBackground
+            )
 
-        Text("Shape mode")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ShapeMode.entries.forEach { mode ->
-                Button(onClick = { scope.launch { repository.updateShapeMode(mode) } }) {
-                    Text(mode.name.lowercase().replace('_', ' '))
+            SettingsSectionLabel("Theme mode")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ThemeMode.entries.forEach { mode ->
+                    val selected = settings.themeMode == mode
+                    Button(
+                        onClick = { scope.launch { repository.updateThemeMode(mode) } },
+                        colors = modeToggleColors(selected)
+                    ) {
+                        Text(
+                            mode.name.lowercase().replaceFirstChar { it.titlecase() }
+                        )
+                    }
                 }
             }
-        }
 
-        Text("Shape timeout: ${settings.shapeTimeoutSeconds}s")
-        Slider(
-            value = settings.shapeTimeoutSeconds.toFloat(),
-            onValueChange = { scope.launch { repository.updateTimeoutSeconds(it.toInt()) } },
-            valueRange = 3f..60f
-        )
-
-        Text("Max shapes: ${settings.maxShapes}")
-        Slider(
-            value = settings.maxShapes.toFloat(),
-            onValueChange = { scope.launch { repository.updateMaxShapes(it.toInt()) } },
-            valueRange = 4f..80f
-        )
-
-        ToggleRow("Keep screen on", settings.keepScreenOn) {
-            scope.launch { repository.updateKeepScreenOn(it) }
-        }
-        ToggleRow("Lock app (immersive)", settings.lockApp) {
-            scope.launch { repository.updateLockApp(it) }
-        }
-        ToggleRow("Disable notifications (best effort)", settings.disableNotifications) {
-            if (it) {
-                val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                if (!manager.isNotificationPolicyAccessGranted) {
-                    context.startActivity(
-                        Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
+            SettingsSectionLabel("Shape mode")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ShapeMode.entries.forEach { mode ->
+                    val selected = settings.shapeMode == mode
+                    Button(
+                        onClick = { scope.launch { repository.updateShapeMode(mode) } },
+                        colors = modeToggleColors(selected)
+                    ) {
+                        Text(mode.name.lowercase().replace('_', ' '))
+                    }
                 }
             }
-            scope.launch { repository.updateDisableNotifications(it) }
-        }
 
-        Button(onClick = onBack) { Text("Back") }
+            Text(
+                "Shape timeout: ${settings.shapeTimeoutSeconds}s",
+                color = scheme.onBackground,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Slider(
+                value = settings.shapeTimeoutSeconds.toFloat(),
+                onValueChange = { scope.launch { repository.updateTimeoutSeconds(it.toInt()) } },
+                valueRange = 3f..60f,
+                colors = SliderDefaults.colors(
+                    thumbColor = scheme.primary,
+                    activeTrackColor = scheme.primary,
+                    inactiveTrackColor = scheme.surfaceVariant,
+                    activeTickColor = scheme.onPrimary,
+                    inactiveTickColor = scheme.onSurfaceVariant
+                )
+            )
+
+            Text(
+                "Max shapes: ${settings.maxShapes}",
+                color = scheme.onBackground,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Slider(
+                value = settings.maxShapes.toFloat(),
+                onValueChange = { scope.launch { repository.updateMaxShapes(it.toInt()) } },
+                valueRange = 4f..80f,
+                colors = SliderDefaults.colors(
+                    thumbColor = scheme.primary,
+                    activeTrackColor = scheme.primary,
+                    inactiveTrackColor = scheme.surfaceVariant,
+                    activeTickColor = scheme.onPrimary,
+                    inactiveTickColor = scheme.onSurfaceVariant
+                )
+            )
+
+            ToggleRow("Keep screen on", settings.keepScreenOn) {
+                scope.launch { repository.updateKeepScreenOn(it) }
+            }
+            ToggleRow("Lock app (immersive)", settings.lockApp) {
+                scope.launch { repository.updateLockApp(it) }
+            }
+            ToggleRow("Disable notifications (best effort)", settings.disableNotifications) {
+                if (it) {
+                    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                    if (!manager.isNotificationPolicyAccessGranted) {
+                        context.startActivity(
+                            Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        )
+                    }
+                }
+                scope.launch { repository.updateDisableNotifications(it) }
+            }
+
+            Button(
+                onClick = onBack,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = scheme.primary,
+                    contentColor = scheme.onPrimary
+                )
+            ) { Text("Back") }
+        }
     }
 }
 
 @Composable
+private fun SettingsSectionLabel(text: String) {
+    val scheme = MaterialTheme.colorScheme
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        color = scheme.onSurfaceVariant
+    )
+}
+
+@Composable
+private fun modeToggleColors(selected: Boolean): ButtonColors {
+    val scheme = MaterialTheme.colorScheme
+    return ButtonDefaults.buttonColors(
+        containerColor = if (selected) scheme.primaryContainer else scheme.surfaceVariant,
+        contentColor = if (selected) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+    )
+}
+
+@Composable
 private fun ToggleRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(label)
-        Switch(checked = checked, onCheckedChange = onChecked)
+        Text(
+            text = label,
+            color = scheme.onBackground,
+            style = MaterialTheme.typography.bodyLarge
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onChecked,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = scheme.primary,
+                checkedTrackColor = scheme.primaryContainer,
+                uncheckedThumbColor = scheme.outline,
+                uncheckedTrackColor = scheme.surfaceVariant,
+                uncheckedBorderColor = scheme.outline
+            )
+        )
     }
 }

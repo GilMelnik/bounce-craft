@@ -1,7 +1,6 @@
 package com.colorbounce.baby
 
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,8 +26,6 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    // Touch handling:
-    // startInteraction either grabs an existing shape or creates a new one at the press point.
     fun startInteraction(point: Offset, settings: AppSettings) {
         val current = _shapes.value
         val hit = current.lastOrNull { pointInShape(point, it) }
@@ -41,6 +38,7 @@ class GameViewModel : ViewModel() {
         val newType = chooseType(settings.shapeMode)
         val size = 70f
         val now = System.currentTimeMillis()
+        val hue = Random.nextFloat() * 360f
         val newShape = GameShape(
             id = nextId++,
             type = newType,
@@ -50,7 +48,10 @@ class GameViewModel : ViewModel() {
             height = size,
             vx = 0f,
             vy = 0f,
-            color = randomBrightColor(),
+            hue = hue,
+            hueSweepDirection = 1f,
+            saturation = calmSaturation(),
+            value = calmValue(),
             lastInteractionMillis = now
         )
         activeShapeId = newShape.id
@@ -58,7 +59,7 @@ class GameViewModel : ViewModel() {
         _shapes.value = (current + newShape).takeLast(settings.maxShapes)
     }
 
-    // During drag, shape follows the pointer and updates size/velocity hints + color.
+    // Drag moves the shape; spectrum ping-pong hue runs in updatePhysics while [activeShapeId] matches.
     fun onDrag(point: Offset, dragAmount: Offset, startPoint: Offset, settings: AppSettings) {
         val shapeId = activeShapeId ?: return
         lastDragDelta = dragAmount
@@ -73,7 +74,6 @@ class GameViewModel : ViewModel() {
                 y = point.y,
                 width = if (isNewish) computedSize else shape.width,
                 height = if (isNewish) computedSize else shape.height,
-                color = randomBrightColor(),
                 lastInteractionMillis = now
             )
         }
@@ -82,12 +82,14 @@ class GameViewModel : ViewModel() {
 
     fun endInteraction() {
         val shapeId = activeShapeId ?: return
-        val launchFactor = 28f
+        val rawVx = lastDragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
+        val rawVy = lastDragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
+        val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy)
         _shapes.value = _shapes.value.map {
             if (it.id == shapeId) {
                 it.copy(
-                    vx = lastDragDelta.x * launchFactor,
-                    vy = lastDragDelta.y * launchFactor,
+                    vx = vx,
+                    vy = vy,
                     lastInteractionMillis = System.currentTimeMillis()
                 )
             } else {
@@ -98,8 +100,6 @@ class GameViewModel : ViewModel() {
         lastDragDelta = Offset.Zero
     }
 
-    // Physics update:
-    // moves shapes, handles edge bounces, then resolves basic pair collisions.
     fun updatePhysics(deltaSeconds: Float, settings: AppSettings) {
         if (deltaSeconds <= 0f) return
         val width = screenSize.x
@@ -133,7 +133,27 @@ class GameViewModel : ViewModel() {
                 vy = -kotlin.math.abs(vy)
             }
 
-            shape.copy(x = x, y = y, vx = vx, vy = vy)
+            val activeId = activeShapeId
+            val (hue, hueDir) =
+                if (activeId != null && shape.id == activeId) {
+                    ShapeColorAnimator.stepHuePingPong(
+                        shape.hue,
+                        shape.hueSweepDirection,
+                        deltaSeconds
+                    )
+                } else {
+                    shape.hue to shape.hueSweepDirection
+                }
+
+            val (cvx, cvy) = ShapeVelocity.clamp(vx, vy)
+            shape.copy(
+                x = x,
+                y = y,
+                vx = cvx,
+                vy = cvy,
+                hue = hue,
+                hueSweepDirection = hueDir
+            )
         }.toMutableList()
 
         resolvePairCollisions(moved)
@@ -163,7 +183,6 @@ class GameViewModel : ViewModel() {
                 val bX = b.x + nx * overlap * 0.5f
                 val bY = b.y + ny * overlap * 0.5f
 
-                // Simple elastic approximation by swapping normal velocity components.
                 val aVn = a.vx * nx + a.vy * ny
                 val bVn = b.vx * nx + b.vy * ny
                 val aTx = a.vx - aVn * nx
@@ -171,18 +190,22 @@ class GameViewModel : ViewModel() {
                 val bTx = b.vx - bVn * nx
                 val bTy = b.vy - bVn * ny
 
-                val newA = a.copy(
+                var newA = a.copy(
                     x = aX,
                     y = aY,
                     vx = aTx + bVn * nx,
                     vy = aTy + bVn * ny
                 )
-                val newB = b.copy(
+                var newB = b.copy(
                     x = bX,
                     y = bY,
                     vx = bTx + aVn * nx,
                     vy = bTy + aVn * ny
                 )
+                val ac = ShapeVelocity.clamp(newA.vx, newA.vy)
+                val bc = ShapeVelocity.clamp(newB.vx, newB.vy)
+                newA = newA.copy(vx = ac.first, vy = ac.second)
+                newB = newB.copy(vx = bc.first, vy = bc.second)
                 shapes[i] = keepInside(newA)
                 shapes[j] = keepInside(newB)
             }
@@ -202,10 +225,18 @@ class GameViewModel : ViewModel() {
         _shapes.value = _shapes.value.takeLast(maxShapes.coerceAtLeast(1))
     }
 
+    /** Restarts ping-pong from current hue; animation continues while finger is down. */
     private fun touchShape(id: Long) {
         val now = System.currentTimeMillis()
         _shapes.value = _shapes.value.map {
-            if (it.id == id) it.copy(color = randomBrightColor(), lastInteractionMillis = now) else it
+            if (it.id == id) {
+                it.copy(
+                    hueSweepDirection = 1f,
+                    lastInteractionMillis = now
+                )
+            } else {
+                it
+            }
         }
     }
 
@@ -231,10 +262,7 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun randomBrightColor(): Color {
-        val hue = Random.nextFloat() * 360f
-        val sat = 0.65f + Random.nextFloat() * 0.35f
-        val value = 0.82f + Random.nextFloat() * 0.18f
-        return Color.hsv(hue, sat.coerceIn(0f, 1f), value.coerceIn(0f, 1f))
-    }
+    private fun calmSaturation(): Float = (0.55f + Random.nextFloat() * 0.18f).coerceIn(0f, 1f)
+
+    private fun calmValue(): Float = (0.78f + Random.nextFloat() * 0.14f).coerceIn(0f, 1f)
 }

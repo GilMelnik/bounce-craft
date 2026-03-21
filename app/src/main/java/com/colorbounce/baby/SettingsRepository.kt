@@ -17,6 +17,7 @@ class SettingsRepository(private val context: Context) {
         val shapeMode = stringPreferencesKey("shape_mode")
         val timeoutSeconds = intPreferencesKey("timeout_seconds")
         val maxShapes = intPreferencesKey("max_shapes")
+        val themeMode = stringPreferencesKey("theme_mode")
         val keepScreenOn = booleanPreferencesKey("keep_screen_on")
         val lockApp = booleanPreferencesKey("lock_app")
         val disableNotifications = booleanPreferencesKey("disable_notifications")
@@ -36,6 +37,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.maxShapes] = maxShapes.coerceIn(4, 80) }
     }
 
+    suspend fun updateThemeMode(mode: ThemeMode) {
+        context.dataStore.edit { it[Keys.themeMode] = mode.name }
+    }
+
     suspend fun updateKeepScreenOn(enabled: Boolean) {
         context.dataStore.edit { it[Keys.keepScreenOn] = enabled }
     }
@@ -53,10 +58,15 @@ class SettingsRepository(private val context: Context) {
             ShapeMode.valueOf(prefs[Keys.shapeMode] ?: ShapeMode.ALTERNATING.name)
         }.getOrDefault(ShapeMode.ALTERNATING)
 
+        val themeMode = runCatching {
+            ThemeMode.valueOf(prefs[Keys.themeMode] ?: ThemeMode.SYSTEM.name)
+        }.getOrDefault(ThemeMode.SYSTEM)
+
         return AppSettings(
             shapeMode = shapeMode,
             shapeTimeoutSeconds = prefs[Keys.timeoutSeconds] ?: 10,
             maxShapes = prefs[Keys.maxShapes] ?: 24,
+            themeMode = themeMode,
             keepScreenOn = prefs[Keys.keepScreenOn] ?: true,
             lockApp = prefs[Keys.lockApp] ?: true,
             disableNotifications = prefs[Keys.disableNotifications] ?: false
