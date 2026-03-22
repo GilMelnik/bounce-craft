@@ -9,7 +9,7 @@ import kotlin.math.hypot
 object ShapeVelocity {
 
     /** Maximum |v| for shapes (pixels per second). */
-    const val MAX_SPEED_PX_PER_SEC = 380f
+    const val MAX_SPEED_PX_PER_SEC = 1200f
 
     /** Scales pointer delta to launch velocity; kept low for gentle motion. */
     const val LAUNCH_DRAG_FACTOR = 8f

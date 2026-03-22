@@ -7,7 +7,7 @@ package com.colorbounce.baby
 object ShapeColorAnimator {
 
     /** Degrees per second while the user is holding/creating the shape. */
-    const val HUE_PING_PONG_DEG_PER_SEC = 42f
+    const val HUE_PING_PONG_DEG_PER_SEC = 120f
 
     /**
      * Advances hue along the spectrum; [direction] is +1 or -1 toward 360° or 0°.

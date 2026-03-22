@@ -64,7 +64,7 @@ class GameViewModel : ViewModel() {
         val shapeId = activeShapeId ?: return
         lastDragDelta = dragAmount
         val dragDistance = (point - startPoint).getDistance()
-        val computedSize = dragDistance.coerceIn(40f, 220f)
+        val computedSize = dragDistance.coerceIn(40f, 550f)
         val now = System.currentTimeMillis()
         _shapes.value = _shapes.value.map { shape ->
             if (shape.id != shapeId) return@map shape
