@@ -4,7 +4,6 @@ import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
-import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -15,8 +14,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +23,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -57,6 +56,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.net.toUri
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -119,16 +120,17 @@ class MainActivity : ComponentActivity() {
                 // Gesture exclusion is best-effort and device dependent.
                 window.decorView.post {
                     val view = window.decorView
-                    view.systemGestureExclusionRects = listOf(
-                        android.graphics.Rect(0, 0, view.width, view.height)
+                    ViewCompat.setSystemGestureExclusionRects(
+                        view,
+                        listOf(android.graphics.Rect(0, 0, view.width, view.height))
                     )
                 }
             } else {
-                window.decorView.systemGestureExclusionRects = emptyList()
+                ViewCompat.setSystemGestureExclusionRects(window.decorView, emptyList())
             }
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
-            window.decorView.systemGestureExclusionRects = emptyList()
+            ViewCompat.setSystemGestureExclusionRects(window.decorView, emptyList())
         }
 
         if (inGame && settings.keepScreenOn) {
@@ -140,8 +142,8 @@ class MainActivity : ComponentActivity() {
 
     private fun bestEffortDisableNotifications(enabled: Boolean) {
         if (!enabled) return
-        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        if (manager.isNotificationPolicyAccessGranted) {
+        val manager = getSystemService(NotificationManager::class.java)
+        if (manager != null && manager.isNotificationPolicyAccessGranted) {
             manager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
         }
     }
@@ -226,7 +228,7 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
             }
 
             Text(
-                text = "Enjoying the app? Buy me a coffee ☕",
+                text = "Enjoying the app? Buy me a coffee \u2615",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 modifier = Modifier
@@ -235,7 +237,7 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
                     .clickable {
                         val intent = Intent(
                             Intent.ACTION_VIEW,
-                            Uri.parse("https://buymeacoffee.com/gilmelnik")
+                            "https://buymeacoffee.com/gilmelnik".toUri()
                         )
                         context.startActivity(intent)
                     }
@@ -455,8 +457,8 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
             }
             ToggleRow("Disable notifications (best effort)", settings.disableNotifications) {
                 if (it) {
-                    val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-                    if (!manager.isNotificationPolicyAccessGranted) {
+                    val manager = context.getSystemService(NotificationManager::class.java)
+                    if (manager != null && !manager.isNotificationPolicyAccessGranted) {
                         context.startActivity(
                             Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)
                                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
