@@ -64,7 +64,7 @@ class GameViewModel : ViewModel() {
         val shapeId = activeShapeId ?: return
         lastDragDelta = dragAmount
         val dragDistance = (point - startPoint).getDistance()
-        val computedSize = dragDistance.coerceIn(40f, 550f)
+        val computedSize = dragDistance.coerceIn(40f, 500f)
         val now = System.currentTimeMillis()
         _shapes.value = _shapes.value.map { shape ->
             if (shape.id != shapeId) return@map shape
@@ -107,35 +107,40 @@ class GameViewModel : ViewModel() {
         val timeoutMs = settings.shapeTimeoutSeconds * 1000L
         val now = System.currentTimeMillis()
 
+        val activeId = activeShapeId
         val moved = _shapes.value.mapNotNull { shape ->
             if (now - shape.lastInteractionMillis > timeoutMs) return@mapNotNull null
 
-            var x = shape.x + shape.vx * deltaSeconds
-            var y = shape.y + shape.vy * deltaSeconds
+            val isHeld = activeId != null && shape.id == activeId
+            var x = shape.x
+            var y = shape.y
             var vx = shape.vx
             var vy = shape.vy
 
-            val halfW = shape.width / 2f
-            val halfH = shape.height / 2f
+            if (!isHeld) {
+                x = shape.x + shape.vx * deltaSeconds
+                y = shape.y + shape.vy * deltaSeconds
 
-            if (x - halfW < 0f) {
-                x = halfW
-                vx = kotlin.math.abs(vx)
-            } else if (x + halfW > width) {
-                x = width - halfW
-                vx = -kotlin.math.abs(vx)
-            }
-            if (y - halfH < 0f) {
-                y = halfH
-                vy = kotlin.math.abs(vy)
-            } else if (y + halfH > height) {
-                y = height - halfH
-                vy = -kotlin.math.abs(vy)
-            }
+                val halfW = shape.width / 2f
+                val halfH = shape.height / 2f
 
-            val activeId = activeShapeId
+                if (x - halfW < 0f) {
+                    x = halfW
+                    vx = kotlin.math.abs(vx)
+                } else if (x + halfW > width) {
+                    x = width - halfW
+                    vx = -kotlin.math.abs(vx)
+                }
+                if (y - halfH < 0f) {
+                    y = halfH
+                    vy = kotlin.math.abs(vy)
+                } else if (y + halfH > height) {
+                    y = height - halfH
+                    vy = -kotlin.math.abs(vy)
+                }
+            }
             val (hue, hueDir) =
-                if (activeId != null && shape.id == activeId) {
+                if (isHeld) {
                     ShapeColorAnimator.stepHuePingPong(
                         shape.hue,
                         shape.hueSweepDirection,
@@ -161,6 +166,7 @@ class GameViewModel : ViewModel() {
     }
 
     private fun resolvePairCollisions(shapes: MutableList<GameShape>) {
+        val heldId = activeShapeId
         for (i in 0 until shapes.size) {
             for (j in i + 1 until shapes.size) {
                 val a = shapes[i]
@@ -178,36 +184,74 @@ class GameViewModel : ViewModel() {
                 val ny = dy / distance
                 val overlap = minDist - distance
 
-                val aX = a.x - nx * overlap * 0.5f
-                val aY = a.y - ny * overlap * 0.5f
-                val bX = b.x + nx * overlap * 0.5f
-                val bY = b.y + ny * overlap * 0.5f
+                when {
+                    a.id == heldId -> {
+                        val bX = b.x + nx * overlap
+                        val bY = b.y + ny * overlap
+                        val bVn = b.vx * nx + b.vy * ny
+                        val bTx = b.vx - bVn * nx
+                        val bTy = b.vy - bVn * ny
+                        var newB = b.copy(
+                            x = bX,
+                            y = bY,
+                            vx = bTx - bVn * nx,
+                            vy = bTy - bVn * ny
+                        )
+                        val bc = ShapeVelocity.clamp(newB.vx, newB.vy)
+                        newB = newB.copy(vx = bc.first, vy = bc.second)
+                        shapes[i] = keepInside(a)
+                        shapes[j] = keepInside(newB)
+                    }
+                    b.id == heldId -> {
+                        val aX = a.x - nx * overlap
+                        val aY = a.y - ny * overlap
+                        val aVn = a.vx * nx + a.vy * ny
+                        val aTx = a.vx - aVn * nx
+                        val aTy = a.vy - aVn * ny
+                        var newA = a.copy(
+                            x = aX,
+                            y = aY,
+                            vx = aTx - aVn * nx,
+                            vy = aTy - aVn * ny
+                        )
+                        val ac = ShapeVelocity.clamp(newA.vx, newA.vy)
+                        newA = newA.copy(vx = ac.first, vy = ac.second)
+                        shapes[i] = keepInside(newA)
+                        shapes[j] = keepInside(b)
+                    }
+                    else -> {
+                        val aX = a.x - nx * overlap * 0.5f
+                        val aY = a.y - ny * overlap * 0.5f
+                        val bX = b.x + nx * overlap * 0.5f
+                        val bY = b.y + ny * overlap * 0.5f
 
-                val aVn = a.vx * nx + a.vy * ny
-                val bVn = b.vx * nx + b.vy * ny
-                val aTx = a.vx - aVn * nx
-                val aTy = a.vy - aVn * ny
-                val bTx = b.vx - bVn * nx
-                val bTy = b.vy - bVn * ny
+                        val aVn = a.vx * nx + a.vy * ny
+                        val bVn = b.vx * nx + b.vy * ny
+                        val aTx = a.vx - aVn * nx
+                        val aTy = a.vy - aVn * ny
+                        val bTx = b.vx - bVn * nx
+                        val bTy = b.vy - bVn * ny
 
-                var newA = a.copy(
-                    x = aX,
-                    y = aY,
-                    vx = aTx + bVn * nx,
-                    vy = aTy + bVn * ny
-                )
-                var newB = b.copy(
-                    x = bX,
-                    y = bY,
-                    vx = bTx + aVn * nx,
-                    vy = bTy + aVn * ny
-                )
-                val ac = ShapeVelocity.clamp(newA.vx, newA.vy)
-                val bc = ShapeVelocity.clamp(newB.vx, newB.vy)
-                newA = newA.copy(vx = ac.first, vy = ac.second)
-                newB = newB.copy(vx = bc.first, vy = bc.second)
-                shapes[i] = keepInside(newA)
-                shapes[j] = keepInside(newB)
+                        var newA = a.copy(
+                            x = aX,
+                            y = aY,
+                            vx = aTx + bVn * nx,
+                            vy = aTy + bVn * ny
+                        )
+                        var newB = b.copy(
+                            x = bX,
+                            y = bY,
+                            vx = bTx + aVn * nx,
+                            vy = bTy + aVn * ny
+                        )
+                        val ac = ShapeVelocity.clamp(newA.vx, newA.vy)
+                        val bc = ShapeVelocity.clamp(newB.vx, newB.vy)
+                        newA = newA.copy(vx = ac.first, vy = ac.second)
+                        newB = newB.copy(vx = bc.first, vy = bc.second)
+                        shapes[i] = keepInside(newA)
+                        shapes[j] = keepInside(newB)
+                    }
+                }
             }
         }
     }
