@@ -405,6 +405,24 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 )
             )
 
+            Text(
+                "Auto-spawn after: ${if (settings.autoSpawnInactivitySeconds == 0) "Off" else "${settings.autoSpawnInactivitySeconds}s"}",
+                color = scheme.onBackground,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Slider(
+                value = settings.autoSpawnInactivitySeconds.toFloat(),
+                onValueChange = { scope.launch { repository.updateAutoSpawnSeconds(it.toInt()) } },
+                valueRange = 0f..30f,
+                colors = SliderDefaults.colors(
+                    thumbColor = scheme.primary,
+                    activeTrackColor = scheme.primary,
+                    inactiveTrackColor = scheme.surfaceVariant,
+                    activeTickColor = scheme.onPrimary,
+                    inactiveTickColor = scheme.onSurfaceVariant
+                )
+            )
+
             ToggleRow("Keep screen on", settings.keepScreenOn) {
                 scope.launch { repository.updateKeepScreenOn(it) }
             }

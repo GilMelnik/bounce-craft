@@ -21,6 +21,7 @@ class SettingsRepository(private val context: Context) {
         val keepScreenOn = booleanPreferencesKey("keep_screen_on")
         val lockApp = booleanPreferencesKey("lock_app")
         val disableNotifications = booleanPreferencesKey("disable_notifications")
+        val autoSpawnSeconds = intPreferencesKey("auto_spawn_seconds")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map(::toSettings)
@@ -53,6 +54,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.disableNotifications] = enabled }
     }
 
+    suspend fun updateAutoSpawnSeconds(seconds: Int) {
+        context.dataStore.edit { it[Keys.autoSpawnSeconds] = seconds.coerceIn(0, 30) }
+    }
+
     private fun toSettings(prefs: Preferences): AppSettings {
         val shapeMode = runCatching {
             ShapeMode.valueOf(prefs[Keys.shapeMode] ?: ShapeMode.ALTERNATING.name)
@@ -69,7 +74,8 @@ class SettingsRepository(private val context: Context) {
             themeMode = themeMode,
             keepScreenOn = prefs[Keys.keepScreenOn] ?: true,
             lockApp = prefs[Keys.lockApp] ?: true,
-            disableNotifications = prefs[Keys.disableNotifications] ?: false
+            disableNotifications = prefs[Keys.disableNotifications] ?: false,
+            autoSpawnInactivitySeconds = prefs[Keys.autoSpawnSeconds] ?: 8
         )
     }
 }

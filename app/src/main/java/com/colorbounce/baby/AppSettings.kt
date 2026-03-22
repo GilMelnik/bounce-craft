@@ -20,5 +20,7 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val keepScreenOn: Boolean = true,
     val lockApp: Boolean = true,
-    val disableNotifications: Boolean = false
+    val disableNotifications: Boolean = false,
+    /** After this many seconds of inactivity, a new shape is spawned automatically. */
+    val autoSpawnInactivitySeconds: Int = 8
 )

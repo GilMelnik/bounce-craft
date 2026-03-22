@@ -20,6 +20,9 @@ class GameViewModel : ViewModel() {
     private var lastDragDelta = Offset.Zero
     private var screenSize = Offset(1f, 1f)
 
+    private var lastUserInteractionMillis = System.currentTimeMillis()
+    private var lastAutoSpawnMillis = System.currentTimeMillis()
+
     fun setScreenSize(width: Float, height: Float) {
         if (width > 0f && height > 0f) {
             screenSize = Offset(width, height)
@@ -27,11 +30,12 @@ class GameViewModel : ViewModel() {
     }
 
     fun startInteraction(point: Offset, settings: AppSettings) {
+        recordInteraction()
         val current = _shapes.value
         val hit = current.lastOrNull { pointInShape(point, it) }
         if (hit != null) {
             activeShapeId = hit.id
-            touchShape(hit.id)
+            updateInteractionTime(hit.id)
             return
         }
 
@@ -49,7 +53,6 @@ class GameViewModel : ViewModel() {
             vx = 0f,
             vy = 0f,
             hue = hue,
-            hueSweepDirection = 1f,
             saturation = calmSaturation(),
             value = calmValue(),
             lastInteractionMillis = now
@@ -59,8 +62,8 @@ class GameViewModel : ViewModel() {
         _shapes.value = (current + newShape).takeLast(settings.maxShapes)
     }
 
-    // Drag moves the shape; spectrum ping-pong hue runs in updatePhysics while [activeShapeId] matches.
     fun onDrag(point: Offset, dragAmount: Offset, startPoint: Offset, settings: AppSettings) {
+        recordInteraction()
         val shapeId = activeShapeId ?: return
         lastDragDelta = dragAmount
         val dragDistance = (point - startPoint).getDistance()
@@ -81,6 +84,7 @@ class GameViewModel : ViewModel() {
     }
 
     fun endInteraction() {
+        recordInteraction()
         val shapeId = activeShapeId ?: return
         val rawVx = lastDragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
         val rawVy = lastDragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
@@ -106,6 +110,8 @@ class GameViewModel : ViewModel() {
         val height = screenSize.y
         val timeoutMs = settings.shapeTimeoutSeconds * 1000L
         val now = System.currentTimeMillis()
+
+        checkAutoSpawn(now, settings)
 
         val activeId = activeShapeId
         val moved = _shapes.value.mapNotNull { shape ->
@@ -139,16 +145,13 @@ class GameViewModel : ViewModel() {
                     vy = -kotlin.math.abs(vy)
                 }
             }
-            val (hue, hueDir) =
-                if (isHeld) {
-                    ShapeColorAnimator.stepHuePingPong(
-                        shape.hue,
-                        shape.hueSweepDirection,
-                        deltaSeconds
-                    )
-                } else {
-                    shape.hue to shape.hueSweepDirection
-                }
+
+            // Continuous hue cycling while held OR creating
+            val hue = if (isHeld) {
+                ShapeColorAnimator.stepHue(shape.hue, deltaSeconds)
+            } else {
+                shape.hue
+            }
 
             val (cvx, cvy) = ShapeVelocity.clamp(vx, vy)
             shape.copy(
@@ -156,13 +159,60 @@ class GameViewModel : ViewModel() {
                 y = y,
                 vx = cvx,
                 vy = cvy,
-                hue = hue,
-                hueSweepDirection = hueDir
+                hue = hue
             )
         }.toMutableList()
 
         resolvePairCollisions(moved)
         _shapes.value = moved.takeLast(settings.maxShapes)
+    }
+
+    private fun checkAutoSpawn(now: Long, settings: AppSettings) {
+        val inactivityTimeoutMs = settings.autoSpawnInactivitySeconds * 1000L
+        if (now - lastUserInteractionMillis > inactivityTimeoutMs) {
+            if (now - lastAutoSpawnMillis > inactivityTimeoutMs) {
+                spawnRandomShape(settings)
+                lastAutoSpawnMillis = now
+            }
+        } else {
+            lastAutoSpawnMillis = now
+        }
+    }
+
+    private fun spawnRandomShape(settings: AppSettings) {
+        if (_shapes.value.size >= settings.maxShapes) return
+
+        val width = screenSize.x
+        val height = screenSize.y
+        val size = Random.nextFloat() * (150f - 60f) + 60f
+        val margin = size / 2f
+        
+        val rx = Random.nextFloat() * (width - 2 * margin) + margin
+        val ry = Random.nextFloat() * (height - 2 * margin) + margin
+        
+        val maxSpeed = ShapeVelocity.MAX_SPEED_PX_PER_SEC * 0.5f
+        val rvx = (Random.nextFloat() - 0.5f) * 2f * maxSpeed
+        val rvy = (Random.nextFloat() - 0.5f) * 2f * maxSpeed
+        
+        val newShape = GameShape(
+            id = nextId++,
+            type = chooseType(settings.shapeMode),
+            x = rx,
+            y = ry,
+            width = size,
+            height = size,
+            vx = rvx,
+            vy = rvy,
+            hue = Random.nextFloat() * 360f,
+            saturation = calmSaturation(),
+            value = calmValue(),
+            lastInteractionMillis = System.currentTimeMillis()
+        )
+        _shapes.value = (_shapes.value + newShape).takeLast(settings.maxShapes)
+    }
+
+    private fun recordInteraction() {
+        lastUserInteractionMillis = System.currentTimeMillis()
     }
 
     private fun resolvePairCollisions(shapes: MutableList<GameShape>) {
@@ -269,15 +319,11 @@ class GameViewModel : ViewModel() {
         _shapes.value = _shapes.value.takeLast(maxShapes.coerceAtLeast(1))
     }
 
-    /** Restarts ping-pong from current hue; animation continues while finger is down. */
-    private fun touchShape(id: Long) {
+    private fun updateInteractionTime(id: Long) {
         val now = System.currentTimeMillis()
         _shapes.value = _shapes.value.map {
             if (it.id == id) {
-                it.copy(
-                    hueSweepDirection = 1f,
-                    lastInteractionMillis = now
-                )
+                it.copy(lastInteractionMillis = now)
             } else {
                 it
             }
