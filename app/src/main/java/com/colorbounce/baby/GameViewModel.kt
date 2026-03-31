@@ -83,12 +83,12 @@ class GameViewModel : ViewModel() {
         trimToMax(settings.maxShapes)
     }
 
-    fun endInteraction() {
+    fun endInteraction(settings: AppSettings) {
         recordInteraction()
         val shapeId = activeShapeId ?: return
         val rawVx = lastDragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
         val rawVy = lastDragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
-        val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy)
+        val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
         _shapes.value = _shapes.value.map {
             if (it.id == shapeId) {
                 it.copy(
@@ -153,7 +153,7 @@ class GameViewModel : ViewModel() {
                 shape.hue
             }
 
-            val (cvx, cvy) = ShapeVelocity.clamp(vx, vy)
+            val (cvx, cvy) = ShapeVelocity.clamp(vx, vy, settings.maxVelocityPxPerSec.toFloat())
             shape.copy(
                 x = x,
                 y = y,
@@ -163,7 +163,7 @@ class GameViewModel : ViewModel() {
             )
         }.toMutableList()
 
-        resolvePairCollisions(moved)
+        resolvePairCollisions(moved, settings)
         _shapes.value = moved.takeLast(settings.maxShapes)
     }
 
@@ -190,7 +190,7 @@ class GameViewModel : ViewModel() {
         val rx = Random.nextFloat() * (width - 2 * margin) + margin
         val ry = Random.nextFloat() * (height - 2 * margin) + margin
         
-        val maxSpeed = ShapeVelocity.MAX_SPEED_PX_PER_SEC * 0.5f
+        val maxSpeed = settings.maxVelocityPxPerSec.toFloat() * 0.5f
         val rvx = (Random.nextFloat() - 0.5f) * 2f * maxSpeed
         val rvy = (Random.nextFloat() - 0.5f) * 2f * maxSpeed
         
@@ -215,7 +215,7 @@ class GameViewModel : ViewModel() {
         lastUserInteractionMillis = System.currentTimeMillis()
     }
 
-    private fun resolvePairCollisions(shapes: MutableList<GameShape>) {
+    private fun resolvePairCollisions(shapes: MutableList<GameShape>, settings: AppSettings) {
         val heldId = activeShapeId
         for (i in 0 until shapes.size) {
             for (j in i + 1 until shapes.size) {
@@ -247,7 +247,7 @@ class GameViewModel : ViewModel() {
                             vx = bTx - bVn * nx,
                             vy = bTy - bVn * ny
                         )
-                        val bc = ShapeVelocity.clamp(newB.vx, newB.vy)
+                        val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
                         newB = newB.copy(vx = bc.first, vy = bc.second)
                         shapes[i] = keepInside(a)
                         shapes[j] = keepInside(newB)
@@ -264,7 +264,7 @@ class GameViewModel : ViewModel() {
                             vx = aTx - aVn * nx,
                             vy = aTy - aVn * ny
                         )
-                        val ac = ShapeVelocity.clamp(newA.vx, newA.vy)
+                        val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
                         newA = newA.copy(vx = ac.first, vy = ac.second)
                         shapes[i] = keepInside(newA)
                         shapes[j] = keepInside(b)
@@ -294,8 +294,8 @@ class GameViewModel : ViewModel() {
                             vx = bTx + aVn * nx,
                             vy = bTy + aVn * ny
                         )
-                        val ac = ShapeVelocity.clamp(newA.vx, newA.vy)
-                        val bc = ShapeVelocity.clamp(newB.vx, newB.vy)
+                        val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
+                        val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
                         newA = newA.copy(vx = ac.first, vy = ac.second)
                         newB = newB.copy(vx = bc.first, vy = bc.second)
                         shapes[i] = keepInside(newA)

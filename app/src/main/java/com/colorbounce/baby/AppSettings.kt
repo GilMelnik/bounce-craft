@@ -22,5 +22,6 @@ data class AppSettings(
     val lockApp: Boolean = true,
     val disableNotifications: Boolean = false,
     /** After this many seconds of inactivity, a new shape is spawned automatically. */
-    val autoSpawnInactivitySeconds: Int = 8
+    val autoSpawnInactivitySeconds: Int = 8,
+    val maxVelocityPxPerSec: Int = 1200
 )

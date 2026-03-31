@@ -292,8 +292,8 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                         startPoint = start
                         viewModel.startInteraction(start, settings)
                     },
-                    onDragEnd = { viewModel.endInteraction() },
-                    onDragCancel = { viewModel.endInteraction() }
+                    onDragEnd = { viewModel.endInteraction(settings) },
+                    onDragCancel = { viewModel.endInteraction(settings) }
                 ) { change, dragAmount ->
                     viewModel.onDrag(
                         point = change.position,
@@ -440,6 +440,24 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 value = settings.maxShapes.toFloat(),
                 onValueChange = { scope.launch { repository.updateMaxShapes(it.toInt()) } },
                 valueRange = 4f..80f,
+                colors = SliderDefaults.colors(
+                    thumbColor = scheme.primary,
+                    activeTrackColor = scheme.primary,
+                    inactiveTrackColor = scheme.surfaceVariant,
+                    activeTickColor = scheme.onPrimary,
+                    inactiveTickColor = scheme.onSurfaceVariant
+                )
+            )
+
+            Text(
+                "Max velocity: ${settings.maxVelocityPxPerSec}px/s",
+                color = scheme.onBackground,
+                style = MaterialTheme.typography.bodyLarge
+            )
+            Slider(
+                value = settings.maxVelocityPxPerSec.toFloat(),
+                onValueChange = { scope.launch { repository.updateMaxVelocity(it.toInt()) } },
+                valueRange = 100f..3000f,
                 colors = SliderDefaults.colors(
                     thumbColor = scheme.primary,
                     activeTrackColor = scheme.primary,
