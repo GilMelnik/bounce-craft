@@ -12,7 +12,6 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -260,7 +259,6 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
 @Composable
 private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: () -> Unit) {
     val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
-    var startPoint by remember { mutableStateOf(Offset.Zero) }
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val exitButtonBg = MaterialTheme.colorScheme.surfaceVariant
 
@@ -287,20 +285,28 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
             .background(MaterialTheme.colorScheme.background)
             .onSizeChanged { viewModel.setScreenSize(it.width.toFloat(), it.height.toFloat()) }
             .pointerInput(settings.shapeMode, settings.maxShapes) {
-                detectDragGestures(
-                    onDragStart = { start ->
-                        startPoint = start
-                        viewModel.startInteraction(start, settings)
-                    },
-                    onDragEnd = { viewModel.endInteraction(settings) },
-                    onDragCancel = { viewModel.endInteraction(settings) }
-                ) { change, dragAmount ->
-                    viewModel.onDrag(
-                        point = change.position,
-                        dragAmount = dragAmount,
-                        startPoint = startPoint,
-                        settings = settings
-                    )
+                awaitPointerEventScope {
+                    while (true) {
+                        val event = awaitPointerEvent()
+                        event.changes.forEach { change ->
+                            val pointerId = change.id.value
+                            when {
+                                change.pressed && !change.previousPressed -> {
+                                    // start
+                                    viewModel.startInteraction(change.position, settings, pointerId)
+                                }
+                                change.pressed && change.previousPressed -> {
+                                    // drag
+                                    val dragAmount = change.position - change.previousPosition
+                                    viewModel.onDrag(change.position, dragAmount, settings, pointerId)
+                                }
+                                !change.pressed && change.previousPressed -> {
+                                    // end
+                                    viewModel.endInteraction(settings, pointerId)
+                                }
+                            }
+                        }
+                    }
                 }
             }
     ) {

@@ -16,8 +16,9 @@ class GameViewModel : ViewModel() {
 
     private var nextId = 1L
     private var lastType = ShapeType.RECTANGLE
-    private var activeShapeId: Long? = null
-    private var lastDragDelta = Offset.Zero
+    private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
+    private val startPoints = mutableMapOf<Long, Offset>()
+    private val lastDragDeltas = mutableMapOf<Long, Offset>()
     private var screenSize = Offset(1f, 1f)
 
     private var lastUserInteractionMillis = System.currentTimeMillis()
@@ -29,12 +30,12 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    fun startInteraction(point: Offset, settings: AppSettings) {
+    fun startInteraction(point: Offset, settings: AppSettings, pointerId: Long) {
         recordInteraction()
         val current = _shapes.value
         val hit = current.lastOrNull { pointInShape(point, it) }
         if (hit != null) {
-            activeShapeId = hit.id
+            activeShapes[pointerId] = hit.id
             updateInteractionTime(hit.id)
             return
         }
@@ -57,15 +58,16 @@ class GameViewModel : ViewModel() {
             value = calmValue(),
             lastInteractionMillis = now
         )
-        activeShapeId = newShape.id
+        activeShapes[pointerId] = newShape.id
 
         _shapes.value = (current + newShape).takeLast(settings.maxShapes)
     }
 
-    fun onDrag(point: Offset, dragAmount: Offset, startPoint: Offset, settings: AppSettings) {
+    fun onDrag(point: Offset, dragAmount: Offset, settings: AppSettings, pointerId: Long) {
         recordInteraction()
-        val shapeId = activeShapeId ?: return
-        lastDragDelta = dragAmount
+        val shapeId = activeShapes[pointerId] ?: return
+        lastDragDeltas[pointerId] = dragAmount
+        val startPoint = startPoints[pointerId] ?: return
         val dragDistance = (point - startPoint).getDistance()
         val computedSize = dragDistance.coerceIn(40f, 500f)
         val now = System.currentTimeMillis()
@@ -83,11 +85,11 @@ class GameViewModel : ViewModel() {
         trimToMax(settings.maxShapes)
     }
 
-    fun endInteraction(settings: AppSettings) {
+    fun endInteraction(settings: AppSettings, pointerId: Long) {
         recordInteraction()
-        val shapeId = activeShapeId ?: return
-        val rawVx = lastDragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
-        val rawVy = lastDragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
+        val shapeId = activeShapes[pointerId] ?: return
+        val rawVx = lastDragDeltas[pointerId]!!.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
+        val rawVy = lastDragDeltas[pointerId]!!.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
         val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
         _shapes.value = _shapes.value.map {
             if (it.id == shapeId) {
@@ -100,8 +102,8 @@ class GameViewModel : ViewModel() {
                 it
             }
         }
-        activeShapeId = null
-        lastDragDelta = Offset.Zero
+        activeShapes.remove(pointerId)
+        lastDragDeltas.remove(pointerId)
     }
 
     fun updatePhysics(deltaSeconds: Float, settings: AppSettings) {
@@ -113,11 +115,11 @@ class GameViewModel : ViewModel() {
 
         checkAutoSpawn(now, settings)
 
-        val activeId = activeShapeId
+        val activeIds = activeShapes.values.toSet()
         val moved = _shapes.value.mapNotNull { shape ->
             if (now - shape.lastInteractionMillis > timeoutMs) return@mapNotNull null
 
-            val isHeld = activeId != null && shape.id == activeId
+            val isHeld = activeIds.contains(shape.id)
             var x = shape.x
             var y = shape.y
             var vx = shape.vx
@@ -216,7 +218,7 @@ class GameViewModel : ViewModel() {
     }
 
     private fun resolvePairCollisions(shapes: MutableList<GameShape>, settings: AppSettings) {
-        val heldId = activeShapeId
+        val heldIds = activeShapes.values.toSet()
         for (i in 0 until shapes.size) {
             for (j in i + 1 until shapes.size) {
                 val a = shapes[i]
@@ -235,7 +237,7 @@ class GameViewModel : ViewModel() {
                 val overlap = minDist - distance
 
                 when {
-                    a.id == heldId -> {
+                    a.id in heldIds -> {
                         val bX = b.x + nx * overlap
                         val bY = b.y + ny * overlap
                         val bVn = b.vx * nx + b.vy * ny
@@ -252,7 +254,7 @@ class GameViewModel : ViewModel() {
                         shapes[i] = keepInside(a)
                         shapes[j] = keepInside(newB)
                     }
-                    b.id == heldId -> {
+                    b.id in heldIds -> {
                         val aX = a.x - nx * overlap
                         val aY = a.y - ny * overlap
                         val aVn = a.vx * nx + a.vy * ny
