@@ -275,6 +275,10 @@ class GameViewModel : ViewModel() {
                         shapes[j] = keepInside(b)
                     }
                     else -> {
+                        val massA = a.width * a.height
+                        val massB = b.width * b.height
+                        val totalMass = massA + massB
+
                         val aX = a.x - nx * overlap * 0.5f
                         val aY = a.y - ny * overlap * 0.5f
                         val bX = b.x + nx * overlap * 0.5f
@@ -287,17 +291,20 @@ class GameViewModel : ViewModel() {
                         val bTx = b.vx - bVn * nx
                         val bTy = b.vy - bVn * ny
 
+                        val aVnNew = ((massA - massB) / totalMass) * aVn + (2f * massB / totalMass) * bVn
+                        val bVnNew = (2f * massA / totalMass) * aVn + ((massB - massA) / totalMass) * bVn
+
                         var newA = a.copy(
                             x = aX,
                             y = aY,
-                            vx = aTx + bVn * nx,
-                            vy = aTy + bVn * ny
+                            vx = aTx + aVnNew * nx,
+                            vy = aTy + aVnNew * ny
                         )
                         var newB = b.copy(
                             x = bX,
                             y = bY,
-                            vx = bTx + aVn * nx,
-                            vy = bTy + aVn * ny
+                            vx = bTx + bVnNew * nx,
+                            vy = bTy + bVnNew * ny
                         )
                         val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
                         val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
