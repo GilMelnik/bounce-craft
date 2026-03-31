@@ -51,6 +51,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -325,6 +326,28 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                         topLeft = topLeft,
                         size = Size(shape.width, shape.height)
                     )
+
+                    ShapeType.TRIANGLE -> {
+                        val path = Path().apply {
+                            moveTo(shape.x, shape.y - shape.height / 2f)
+                            lineTo(shape.x - shape.width / 2f, shape.y + shape.height / 2f)
+                            lineTo(shape.x + shape.width / 2f, shape.y + shape.height / 2f)
+                            close()
+                        }
+                        drawPath(path, color = shape.color)
+                    }
+
+                    ShapeType.ARCH -> {
+                        val path = Path().apply {
+                            moveTo(shape.x - shape.width / 2f, shape.y + shape.height / 2f)
+                            quadraticBezierTo(
+                                shape.x, shape.y - shape.height / 2f,
+                                shape.x + shape.width / 2f, shape.y + shape.height / 2f
+                            )
+                            close()
+                        }
+                        drawPath(path, color = shape.color)
+                    }
                 }
             }
         }
@@ -406,15 +429,26 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 }
             }
 
-            SettingsSectionLabel("Shape mode")
+            SettingsSectionLabel("Shape selection")
+            ShapeType.entries.forEach { shapeType ->
+                val checked = settings.selectedShapes.contains(shapeType)
+                ToggleRow(shapeType.name.lowercase().replaceFirstChar { it.titlecase() }, checked) { newChecked ->
+                    val newSet = if (newChecked) {
+                        settings.selectedShapes + shapeType
+                    } else {
+                        (settings.selectedShapes - shapeType).takeIf { it.isNotEmpty() } ?: settings.selectedShapes
+                    }
+                    scope.launch { repository.updateSelectedShapes(newSet) }
+                }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ShapeMode.entries.forEach { mode ->
-                    val selected = settings.shapeMode == mode
+                ShapeSelectionMode.entries.forEach { mode ->
+                    val selected = settings.shapeSelectionMode == mode
                     Button(
-                        onClick = { scope.launch { repository.updateShapeMode(mode) } },
+                        onClick = { scope.launch { repository.updateShapeSelectionMode(mode) } },
                         colors = modeToggleColors(selected)
                     ) {
-                        Text(mode.name.lowercase().replace('_', ' '))
+                        Text(mode.name.lowercase().replaceFirstChar { it.titlecase() })
                     }
                 }
             }

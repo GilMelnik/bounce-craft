@@ -15,6 +15,8 @@ private val Context.dataStore by preferencesDataStore(name = "colorbounce_settin
 class SettingsRepository(private val context: Context) {
     private object Keys {
         val shapeMode = stringPreferencesKey("shape_mode")
+        val selectedShapes = stringPreferencesKey("selected_shapes")
+        val shapeSelectionMode = stringPreferencesKey("shape_selection_mode")
         val timeoutSeconds = intPreferencesKey("timeout_seconds")
         val maxShapes = intPreferencesKey("max_shapes")
         val themeMode = stringPreferencesKey("theme_mode")
@@ -63,10 +65,28 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.maxVelocity] = velocity.coerceIn(100, 3000) }
     }
 
+    suspend fun updateSelectedShapes(shapes: Set<ShapeType>) {
+        if (shapes.isEmpty()) return // Prevent empty set
+        context.dataStore.edit { it[Keys.selectedShapes] = shapes.joinToString(",") { it.name } }
+    }
+
+    suspend fun updateShapeSelectionMode(mode: ShapeSelectionMode) {
+        context.dataStore.edit { it[Keys.shapeSelectionMode] = mode.name }
+    }
+
     private fun toSettings(prefs: Preferences): AppSettings {
         val shapeMode = runCatching {
             ShapeMode.valueOf(prefs[Keys.shapeMode] ?: ShapeMode.ALTERNATING.name)
         }.getOrDefault(ShapeMode.ALTERNATING)
+
+        val selectedShapes = runCatching {
+            val str = prefs[Keys.selectedShapes] ?: "CIRCLE,RECTANGLE,TRIANGLE,ARCH"
+            str.split(",").mapNotNull { runCatching { ShapeType.valueOf(it) }.getOrNull() }.toSet()
+        }.getOrDefault(setOf(ShapeType.CIRCLE, ShapeType.RECTANGLE, ShapeType.TRIANGLE, ShapeType.ARCH)).takeIf { it.isNotEmpty() } ?: setOf(ShapeType.CIRCLE)
+
+        val shapeSelectionMode = runCatching {
+            ShapeSelectionMode.valueOf(prefs[Keys.shapeSelectionMode] ?: ShapeSelectionMode.ALTERNATE.name)
+        }.getOrDefault(ShapeSelectionMode.ALTERNATE)
 
         val themeMode = runCatching {
             ThemeMode.valueOf(prefs[Keys.themeMode] ?: ThemeMode.SYSTEM.name)
@@ -74,6 +94,8 @@ class SettingsRepository(private val context: Context) {
 
         return AppSettings(
             shapeMode = shapeMode,
+            selectedShapes = selectedShapes,
+            shapeSelectionMode = shapeSelectionMode,
             shapeTimeoutSeconds = prefs[Keys.timeoutSeconds] ?: 10,
             maxShapes = prefs[Keys.maxShapes] ?: 24,
             themeMode = themeMode,

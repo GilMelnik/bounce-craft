@@ -15,7 +15,7 @@ class GameViewModel : ViewModel() {
     val shapes: StateFlow<List<GameShape>> = _shapes.asStateFlow()
 
     private var nextId = 1L
-    private var lastType = ShapeType.RECTANGLE
+    private var lastTypeIndex = 0
     private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
     private val startPoints = mutableMapOf<Long, Offset>()
     private val lastDragDeltas = mutableMapOf<Long, Offset>()
@@ -36,11 +36,12 @@ class GameViewModel : ViewModel() {
         val hit = current.lastOrNull { pointInShape(point, it) }
         if (hit != null) {
             activeShapes[pointerId] = hit.id
+            startPoints[pointerId] = point
             updateInteractionTime(hit.id)
             return
         }
 
-        val newType = chooseType(settings.shapeMode)
+        val newType = chooseType(settings.selectedShapes, settings.shapeSelectionMode)
         val size = 70f
         val now = System.currentTimeMillis()
         val hue = Random.nextFloat() * 360f
@@ -59,6 +60,7 @@ class GameViewModel : ViewModel() {
             lastInteractionMillis = now
         )
         activeShapes[pointerId] = newShape.id
+        startPoints[pointerId] = point
 
         _shapes.value = (current + newShape).takeLast(settings.maxShapes)
     }
@@ -104,6 +106,7 @@ class GameViewModel : ViewModel() {
         }
         activeShapes.remove(pointerId)
         lastDragDeltas.remove(pointerId)
+        startPoints.remove(pointerId)
     }
 
     fun updatePhysics(deltaSeconds: Float, settings: AppSettings) {
@@ -198,7 +201,7 @@ class GameViewModel : ViewModel() {
         
         val newShape = GameShape(
             id = nextId++,
-            type = chooseType(settings.shapeMode),
+            type = chooseType(settings.selectedShapes, settings.shapeSelectionMode),
             x = rx,
             y = ry,
             width = size,
@@ -332,26 +335,23 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun chooseType(mode: ShapeMode): ShapeType {
-        return when (mode) {
-            ShapeMode.CIRCLE_ONLY -> ShapeType.CIRCLE
-            ShapeMode.RECTANGLE_ONLY -> ShapeType.RECTANGLE
-            ShapeMode.ALTERNATING -> {
-                lastType = if (lastType == ShapeType.CIRCLE) ShapeType.RECTANGLE else ShapeType.CIRCLE
-                lastType
+    private fun chooseType(selectedShapes: Set<ShapeType>, selectionMode: ShapeSelectionMode): ShapeType {
+        val shapesList = selectedShapes.toList()
+        if (shapesList.isEmpty()) return ShapeType.CIRCLE // fallback
+        return when (selectionMode) {
+            ShapeSelectionMode.ALTERNATE -> {
+                val type = shapesList[lastTypeIndex % shapesList.size]
+                lastTypeIndex = (lastTypeIndex + 1) % shapesList.size
+                type
             }
-            ShapeMode.RANDOM -> if (Random.nextBoolean()) ShapeType.CIRCLE else ShapeType.RECTANGLE
+            ShapeSelectionMode.RANDOM -> shapesList.random()
         }
     }
 
     private fun pointInShape(point: Offset, shape: GameShape): Boolean {
         val dx = point.x - shape.x
         val dy = point.y - shape.y
-        return if (shape.type == ShapeType.CIRCLE) {
-            hypot(dx, dy) <= shape.width / 2f
-        } else {
-            kotlin.math.abs(dx) <= shape.width / 2f && kotlin.math.abs(dy) <= shape.height / 2f
-        }
+        return kotlin.math.abs(dx) <= shape.width / 2f && kotlin.math.abs(dy) <= shape.height / 2f
     }
 
     private fun calmSaturation(): Float = (0.55f + Random.nextFloat() * 0.18f).coerceIn(0f, 1f)
