@@ -50,8 +50,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -70,8 +73,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlin.math.max
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.min
 
 private const val GAME_SURFACE_TAG = "game_surface"
 private const val EXIT_BUTTON_TAG = "exit_button"
@@ -338,15 +343,20 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                     }
 
                     ShapeType.ARCH -> {
-                        val path = Path().apply {
-                            moveTo(shape.x - shape.width / 2f, shape.y + shape.height / 2f)
-                            quadraticBezierTo(
-                                shape.x, shape.y - shape.height / 2f,
-                                shape.x + shape.width / 2f, shape.y + shape.height / 2f
-                            )
-                            close()
-                        }
-                        drawPath(path, color = shape.color)
+                        val centerX = shape.x
+                        val radius = shape.width / 2f
+                        val centerY = shape.y + radius
+
+                        val strokeWidth = min(shape.height, radius * 0.6f)
+                        drawArc(
+                            color = shape.color,
+                            startAngle = 180f,
+                            sweepAngle = 180f,
+                            useCenter = false, // critical: no filling
+                            topLeft = Offset(centerX - radius, centerY - radius),
+                            size = Size(radius * 2, radius * 2),
+                            style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
+                        )
                     }
                 }
             }
