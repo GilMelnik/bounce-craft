@@ -17,14 +17,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -51,6 +55,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -192,6 +197,8 @@ private fun ColorBounceApp(
 @Composable
 private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
     val context = LocalContext.current
+    val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
+
     // Surface sets LocalContentColor to onBackground for default text (light + dark).
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -202,7 +209,12 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(24.dp),
+                    .padding(
+                        top = systemBarsPadding.calculateTopPadding(),
+                        bottom = systemBarsPadding.calculateBottomPadding(),
+                        start = 24.dp,
+                        end = 24.dp
+                    ),
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
@@ -227,12 +239,12 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
             }
 
             Text(
-                text = "Enjoying the app? Buy me a coffee \u2615",
+                text = "Enjoying the app? Buy me a coffee ☕",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp)
+                    .padding(bottom = 32.dp + systemBarsPadding.calculateBottomPadding())
                     .clickable {
                         val intent = Intent(
                             Intent.ACTION_VIEW,
@@ -347,6 +359,7 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val scroll = rememberScrollState()
+    val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -355,8 +368,14 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
     ) {
         Column(
             modifier = Modifier
+                .fillMaxSize()
                 .verticalScroll(scroll)
-                .padding(16.dp),
+                .padding(
+                    top = systemBarsPadding.calculateTopPadding(),
+                    bottom = systemBarsPadding.calculateBottomPadding(),
+                    start = 16.dp,
+                    end = 16.dp
+                ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
