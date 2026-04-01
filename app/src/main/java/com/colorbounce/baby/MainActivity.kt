@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.os.Bundle
+import android.util.Log
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -78,80 +79,128 @@ import kotlin.math.min
 
 private const val GAME_SURFACE_TAG = "game_surface"
 private const val EXIT_BUTTON_TAG = "exit_button"
+private const val TAG = "MainActivity"
 
 class MainActivity : ComponentActivity() {
     private lateinit var settingsRepository: SettingsRepository
     private val gameViewModel: GameViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-        settingsRepository = SettingsRepository(this)
-        enableEdgeToEdge()
+        try {
+            super.onCreate(savedInstanceState)
+            Log.d(TAG, "onCreate called")
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            settingsRepository = SettingsRepository(this)
+            enableEdgeToEdge()
 
-        setContent {
-            val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(AppSettings())
-            ColorBounceTheme(themeMode = settings.themeMode) {
-                val navController = rememberNavController()
-                ColorBounceApp(
-                    navController = navController,
-                    settings = settings,
-                    gameViewModel = gameViewModel,
-                    settingsRepository = settingsRepository,
-                    onApplyWindowMode = { inGame ->
-                        applyWindowMode(inGame = inGame, settings = settings)
-                    },
-                    onBestEffortDisableNotifications = {
-                        bestEffortDisableNotifications(settings.disableNotifications)
-                    }
-                )
+            setContent {
+                val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(AppSettings())
+                ColorBounceTheme(themeMode = settings.themeMode) {
+                    val navController = rememberNavController()
+                    ColorBounceApp(
+                        navController = navController,
+                        settings = settings,
+                        gameViewModel = gameViewModel,
+                        settingsRepository = settingsRepository,
+                        onApplyWindowMode = { inGame ->
+                            applyWindowMode(inGame = inGame, settings = settings)
+                        },
+                        onBestEffortDisableNotifications = {
+                            bestEffortDisableNotifications(settings.disableNotifications)
+                        }
+                    )
+                }
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onCreate", e)
+            throw e
         }
     }
 
     override fun onResume() {
-        super.onResume()
+        try {
+            super.onResume()
+            Log.d(TAG, "onResume called")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onResume", e)
+        }
+    }
+
+    override fun onPause() {
+        try {
+            super.onPause()
+            Log.d(TAG, "onPause called")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onPause", e)
+        }
+    }
+
+    override fun onDestroy() {
+        try {
+            Log.d(TAG, "onDestroy called")
+            super.onDestroy()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onDestroy", e)
+        }
     }
 
     private fun applyWindowMode(inGame: Boolean, settings: AppSettings) {
-        // Fullscreen/lock implementation:
-        // hide system bars in game and use sticky immersive behavior.
-        val controller = WindowCompat.getInsetsController(window, window.decorView)
-        WindowCompat.setDecorFitsSystemWindows(window, !inGame)
-        if (inGame) {
-            controller.hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        try {
+            // Fullscreen/lock implementation:
+            // hide system bars in game and use sticky immersive behavior.
+            val controller = WindowCompat.getInsetsController(window, window.decorView)
+            WindowCompat.setDecorFitsSystemWindows(window, !inGame)
+            if (inGame) {
+                controller.hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
+                controller.systemBarsBehavior =
+                    WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
 
-            if (settings.lockApp) {
-                // Gesture exclusion is best-effort and device dependent.
-                window.decorView.post {
-                    val view = window.decorView
-                    ViewCompat.setSystemGestureExclusionRects(
-                        view,
-                        listOf(android.graphics.Rect(0, 0, view.width, view.height))
-                    )
+                if (settings.lockApp) {
+                    // Gesture exclusion is best-effort and device dependent.
+                    window.decorView.post {
+                        try {
+                            val view = window.decorView
+                            ViewCompat.setSystemGestureExclusionRects(
+                                view,
+                                listOf(android.graphics.Rect(0, 0, view.width, view.height))
+                            )
+                            Log.d(TAG, "Gesture exclusion set for fullscreen")
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error setting gesture exclusion", e)
+                        }
+                    }
+                } else {
+                    ViewCompat.setSystemGestureExclusionRects(window.decorView, emptyList())
                 }
             } else {
+                controller.show(WindowInsetsCompat.Type.systemBars())
                 ViewCompat.setSystemGestureExclusionRects(window.decorView, emptyList())
             }
-        } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
-            ViewCompat.setSystemGestureExclusionRects(window.decorView, emptyList())
-        }
 
-        if (inGame && settings.keepScreenOn) {
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        } else {
-            window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            if (inGame && settings.keepScreenOn) {
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                Log.d(TAG, "Screen on flag set")
+            } else {
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            }
+            Log.d(TAG, "Window mode applied: inGame=$inGame")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in applyWindowMode", e)
         }
     }
 
     private fun bestEffortDisableNotifications(enabled: Boolean) {
-        if (!enabled) return
-        val manager = getSystemService(NotificationManager::class.java)
-        if (manager != null && manager.isNotificationPolicyAccessGranted) {
-            manager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+        try {
+            if (!enabled) return
+            val manager = getSystemService(NotificationManager::class.java)
+            if (manager != null && manager.isNotificationPolicyAccessGranted) {
+                manager.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_NONE)
+                Log.d(TAG, "Notifications disabled")
+            } else {
+                Log.d(TAG, "Notification policy access not granted")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in bestEffortDisableNotifications", e)
         }
     }
 }
@@ -176,22 +225,34 @@ private fun ColorBounceApp(
     NavHost(navController = navController, startDestination = "menu") {
         composable("menu") {
             MainMenuScreen(
-                onPlay = { navController.navigate("game") },
-                onSettings = { navController.navigate("settings") }
+                onPlay = {
+                    Log.d(TAG, "Navigating to game screen")
+                    navController.navigate("game")
+                },
+                onSettings = {
+                    Log.d(TAG, "Navigating to settings screen")
+                    navController.navigate("settings")
+                }
             )
         }
         composable("settings") {
             SettingsScreen(
                 settings = settings,
                 repository = settingsRepository,
-                onBack = { navController.popBackStack() }
+                onBack = {
+                    Log.d(TAG, "Navigating back from settings")
+                    navController.popBackStack()
+                }
             )
         }
         composable("game") {
             GameScreen(
                 settings = settings,
                 viewModel = gameViewModel,
-                onExit = { navController.popBackStack() }
+                onExit = {
+                    Log.d(TAG, "Exiting game, navigating back to menu")
+                    navController.popBackStack()
+                }
             )
         }
     }
@@ -287,7 +348,13 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
             .fillMaxSize()
             .testTag(GAME_SURFACE_TAG)
             .background(MaterialTheme.colorScheme.background)
-            .onSizeChanged { viewModel.setScreenSize(it.width.toFloat(), it.height.toFloat()) }
+            .onSizeChanged {
+                try {
+                    viewModel.setScreenSize(it.width.toFloat(), it.height.toFloat())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error in onSizeChanged", e)
+                }
+            }
             .pointerInput(settings.shapeMode, settings.maxShapes) {
                 awaitPointerEventScope {
                     while (true) {
@@ -369,7 +436,14 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                 .zIndex(10f)
                 .testTag(EXIT_BUTTON_TAG)
                 .background(exitButtonBg, CircleShape)
-                .clickable { onExit() },
+                .clickable {
+                    try {
+                        Log.d(TAG, "Exit button clicked")
+                        onExit()
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error in onExit", e)
+                    }
+                },
             contentAlignment = Alignment.Center
         ) {
             Canvas(Modifier.size(18.dp)) {
