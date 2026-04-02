@@ -18,7 +18,7 @@ object ShapeColorAnimator {
 }
 
 internal fun Float.normalizeHue(): Float {
-    var h = this % 360f
-    if (h < 0f) h += 360f
-    return h
-}
+     var h = this % 360f
+     if (h < 0f) h += 360f
+     return h.coerceIn(0f, 360f)
+ }

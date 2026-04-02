@@ -357,26 +357,30 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
             }
             .pointerInput(settings.shapeMode, settings.maxShapes) {
                 awaitPointerEventScope {
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        event.changes.forEach { change ->
-                            val pointerId = change.id.value
-                            when {
-                                change.pressed && !change.previousPressed -> {
-                                    // start
-                                    viewModel.startInteraction(change.position, settings, pointerId)
-                                }
-                                change.pressed && change.previousPressed -> {
-                                    // drag
-                                    val dragAmount = change.position - change.previousPosition
-                                    viewModel.onDrag(change.position, dragAmount, settings, pointerId)
-                                }
-                                !change.pressed && change.previousPressed -> {
-                                    // end
-                                    viewModel.endInteraction(settings, pointerId)
+                    try {
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { change ->
+                                val pointerId = change.id.value
+                                when {
+                                    change.pressed && !change.previousPressed -> {
+                                        // start
+                                        viewModel.startInteraction(change.position, settings, pointerId)
+                                    }
+                                    change.pressed && change.previousPressed -> {
+                                        // drag
+                                        val dragAmount = change.position - change.previousPosition
+                                        viewModel.onDrag(change.position, dragAmount, settings, pointerId)
+                                    }
+                                    !change.pressed && change.previousPressed -> {
+                                        // end
+                                        viewModel.endInteraction(settings, pointerId)
+                                    }
                                 }
                             }
                         }
+                    } catch (_: Exception) {
+                        // Expected when pointerInput scope is cancelled
                     }
                 }
             }

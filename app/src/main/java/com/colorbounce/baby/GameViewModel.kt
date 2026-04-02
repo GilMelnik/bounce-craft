@@ -6,26 +6,28 @@ import androidx.lifecycle.ViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.random.Random
+import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "GameViewModel"
 
 class GameViewModel : ViewModel() {
-    private val _shapes = MutableStateFlow<List<GameShape>>(emptyList())
-    val shapes: StateFlow<List<GameShape>> = _shapes.asStateFlow()
+     private val _shapes = MutableStateFlow<List<GameShape>>(emptyList())
+     val shapes: StateFlow<List<GameShape>> = _shapes.asStateFlow()
 
-    private var nextId = 1L
-    private var lastTypeIndex = 0
-    private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
-    private val startPoints = mutableMapOf<Long, Offset>()
-    private val lastDragDeltas = mutableMapOf<Long, Offset>()
-    private var screenSize = Offset(1f, 1f)
+     private var nextId = 1L
+     private val lastTypeIndex = AtomicInteger(0)
+     private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
+     private val startPoints = mutableMapOf<Long, Offset>()
+     private val lastDragDeltas = mutableMapOf<Long, Offset>()
+     private var screenSize = Offset(1f, 1f)
 
-    private var lastUserInteractionMillis = System.currentTimeMillis()
-    private var lastAutoSpawnMillis = System.currentTimeMillis()
+     private var lastUserInteractionMillis = System.currentTimeMillis()
+     private var lastAutoSpawnMillis = System.currentTimeMillis()
 
     fun setScreenSize(width: Float, height: Float) {
         try {
@@ -40,46 +42,48 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    fun startInteraction(point: Offset, settings: AppSettings, pointerId: Long) {
-        try {
-            recordInteraction()
-            val current = _shapes.value
-            val hit = current.lastOrNull { pointInShape(point, it) }
-            if (hit != null) {
-                Log.d(TAG, "Interaction: Tapped existing shape id=${hit.id}")
-                activeShapes[pointerId] = hit.id
-                startPoints[pointerId] = point
-                updateInteractionTime(hit.id)
-                return
-            }
+     fun startInteraction(point: Offset, settings: AppSettings, pointerId: Long) {
+         try {
+             recordInteraction()
+             val current = _shapes.value
+             val hit = current.lastOrNull { pointInShape(point, it) }
+             if (hit != null) {
+                 Log.d(TAG, "Interaction: Tapped existing shape id=${hit.id}")
+                 activeShapes[pointerId] = hit.id
+                 startPoints[pointerId] = point
+                 lastDragDeltas[pointerId] = Offset.Zero
+                 updateInteractionTime(hit.id)
+                 return
+             }
 
-            val newType = chooseType(settings.selectedShapes, settings.shapeSelectionMode)
-            val size = 70f
-            val now = System.currentTimeMillis()
-            val hue = Random.nextFloat() * 360f
-            val newShape = GameShape(
-                id = nextId++,
-                type = newType,
-                x = point.x,
-                y = point.y,
-                width = size,
-                height = size,
-                vx = 0f,
-                vy = 0f,
-                hue = hue,
-                saturation = calmSaturation(),
-                value = calmValue(),
-                lastInteractionMillis = now
-            )
-            activeShapes[pointerId] = newShape.id
-            startPoints[pointerId] = point
+             val newType = chooseType(settings.selectedShapes, settings.shapeSelectionMode)
+             val size = 70f
+             val now = System.currentTimeMillis()
+             val hue = Random.nextFloat() * 360f
+             val newShape = GameShape(
+                 id = nextId++,
+                 type = newType,
+                 x = point.x,
+                 y = point.y,
+                 width = size,
+                 height = size,
+                 vx = 0f,
+                 vy = 0f,
+                 hue = hue,
+                 saturation = calmSaturation(),
+                 value = calmValue(),
+                 lastInteractionMillis = now
+             )
+             activeShapes[pointerId] = newShape.id
+             startPoints[pointerId] = point
+             lastDragDeltas[pointerId] = Offset.Zero
 
-            _shapes.value = (current + newShape).takeLast(settings.maxShapes)
-            Log.d(TAG, "Interaction: Created new shape id=${newShape.id}, type=$newType, pointerId=$pointerId, totalShapes=${_shapes.value.size}")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in startInteraction", e)
-        }
-    }
+             _shapes.value = (current + newShape).takeLast(settings.maxShapes)
+             Log.d(TAG, "Interaction: Created new shape id=${newShape.id}, type=$newType, pointerId=$pointerId, totalShapes=${_shapes.value.size}")
+         } catch (e: Exception) {
+             Log.e(TAG, "Error in startInteraction", e)
+         }
+     }
 
     fun onDrag(point: Offset, dragAmount: Offset, settings: AppSettings, pointerId: Long) {
         try {
@@ -107,120 +111,126 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    fun endInteraction(settings: AppSettings, pointerId: Long) {
-        try {
-            recordInteraction()
-            val shapeId = activeShapes[pointerId] ?: return
-            val dragDelta = lastDragDeltas[pointerId]
-            if (dragDelta == null) {
-                Log.w(TAG, "No drag delta found for pointerId=$pointerId")
-                activeShapes.remove(pointerId)
-                startPoints.remove(pointerId)
-                lastDragDeltas.remove(pointerId)
-                return
-            }
-            val rawVx = dragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
-            val rawVy = dragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
-            val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
-            _shapes.value = _shapes.value.map {
-                if (it.id == shapeId) {
-                    it.copy(
-                        vx = vx,
-                        vy = vy,
-                        lastInteractionMillis = System.currentTimeMillis()
-                    )
-                } else {
-                    it
-                }
-            }
-            activeShapes.remove(pointerId)
-            lastDragDeltas.remove(pointerId)
-            startPoints.remove(pointerId)
-            Log.d(TAG, "Interaction ended: shapeId=$shapeId, velocity=(${vx}, ${vy})")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in endInteraction for pointerId=$pointerId", e)
-            activeShapes.remove(pointerId)
-            lastDragDeltas.remove(pointerId)
-            startPoints.remove(pointerId)
-        }
-    }
+     fun endInteraction(settings: AppSettings, pointerId: Long) {
+         try {
+             recordInteraction()
+             val shapeId = activeShapes[pointerId] ?: return
+             val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
 
-    fun updatePhysics(deltaSeconds: Float, settings: AppSettings) {
-        try {
-            if (deltaSeconds <= 0f) return
-            val width = screenSize.x
-            val height = screenSize.y
+             if (dragDelta == Offset.Zero) {
+                 Log.w(TAG, "No drag delta found for pointerId=$pointerId")
+                 cleanupPointer(pointerId)
+                 return
+             }
+             val rawVx = dragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
+             val rawVy = dragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
+             val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
+             _shapes.value = _shapes.value.map {
+                 if (it.id == shapeId) {
+                     it.copy(
+                         vx = vx,
+                         vy = vy,
+                         lastInteractionMillis = System.currentTimeMillis()
+                     )
+                 } else {
+                     it
+                 }
+             }
+             cleanupPointer(pointerId)
+             Log.d(TAG, "Interaction ended: shapeId=$shapeId, velocity=(${vx}, ${vy})")
+         } catch (e: Exception) {
+             Log.e(TAG, "Error in endInteraction for pointerId=$pointerId", e)
+             cleanupPointer(pointerId)
+         }
+     }
 
-            // Safety check: ensure valid screen dimensions
-            if (width <= 0f || height <= 0f) {
-                Log.w(TAG, "Invalid screen dimensions in updatePhysics: ${width}x${height}")
-                return
-            }
+     private fun cleanupPointer(pointerId: Long) {
+         activeShapes.remove(pointerId)
+         lastDragDeltas.remove(pointerId)
+         startPoints.remove(pointerId)
+     }
 
-            val timeoutMs = settings.shapeTimeoutSeconds * 1000L
-            val now = System.currentTimeMillis()
+     fun updatePhysics(deltaSeconds: Float, settings: AppSettings) {
+         try {
+             if (deltaSeconds <= 0f) return
+             if (deltaSeconds > 0.1f) {
+                 Log.w(TAG, "Large deltaSeconds detected: $deltaSeconds, clamping to 0.1f for stability")
+             }
 
-            checkAutoSpawn(now, settings)
+             val safeDelta = deltaSeconds.coerceIn(0.001f, 0.1f)
+             val width = screenSize.x
+             val height = screenSize.y
 
-            val activeIds = activeShapes.values.toSet()
-            val moved = _shapes.value.mapNotNull { shape ->
-                if (now - shape.lastInteractionMillis > timeoutMs) {
-                    Log.d(TAG, "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s)")
-                    return@mapNotNull null
-                }
+             // Safety check: ensure valid screen dimensions
+             if (width <= 0f || height <= 0f) {
+                 Log.w(TAG, "Invalid screen dimensions in updatePhysics: ${width}x${height}")
+                 return
+             }
 
-                val isHeld = activeIds.contains(shape.id)
-                var x = shape.x
-                var y = shape.y
-                var vx = shape.vx
-                var vy = shape.vy
+             val timeoutMs = settings.shapeTimeoutSeconds.coerceIn(1, 120) * 1000L
+             val now = System.currentTimeMillis()
 
-                if (!isHeld) {
-                    x = shape.x + shape.vx * deltaSeconds
-                    y = shape.y + shape.vy * deltaSeconds
+             checkAutoSpawn(now, settings)
 
-                    val halfW = shape.width / 2f
-                    val halfH = shape.height / 2f
+             val activeIds = activeShapes.values.toSet()
+             val moved = _shapes.value.mapNotNull { shape ->
+                 if (now - shape.lastInteractionMillis > timeoutMs) {
+                     Log.d(TAG, "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s)")
+                     return@mapNotNull null
+                 }
 
-                    if (x - halfW < 0f) {
-                        x = halfW
-                        vx = kotlin.math.abs(vx)
-                    } else if (x + halfW > width) {
-                        x = width - halfW
-                        vx = -kotlin.math.abs(vx)
-                    }
-                    if (y - halfH < 0f) {
-                        y = halfH
-                        vy = kotlin.math.abs(vy)
-                    } else if (y + halfH > height) {
-                        y = height - halfH
-                        vy = -kotlin.math.abs(vy)
-                    }
-                }
+                 val isHeld = activeIds.contains(shape.id)
+                 var x = shape.x
+                 var y = shape.y
+                 var vx = shape.vx
+                 var vy = shape.vy
 
-                // Continuous hue cycling while held OR creating
-                val hue = if (isHeld) {
-                    ShapeColorAnimator.stepHue(shape.hue, deltaSeconds)
-                } else {
-                    shape.hue
-                }
+                 if (!isHeld) {
+                     x = shape.x + shape.vx * safeDelta
+                     y = shape.y + shape.vy * safeDelta
 
-                val (cvx, cvy) = ShapeVelocity.clamp(vx, vy, settings.maxVelocityPxPerSec.toFloat())
-                shape.copy(
-                    x = x,
-                    y = y,
-                    vx = cvx,
-                    vy = cvy,
-                    hue = hue
-                )
-            }.toMutableList()
+                     val halfW = shape.width / 2f
+                     val halfH = shape.height / 2f
 
-            resolvePairCollisions(moved, settings)
-            _shapes.value = moved.takeLast(settings.maxShapes)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in updatePhysics", e)
-        }
-    }
+                     if (x - halfW < 0f) {
+                         x = halfW
+                         vx = abs(vx)
+                     } else if (x + halfW > width) {
+                         x = width - halfW
+                         vx = -abs(vx)
+                     }
+                     if (y - halfH < 0f) {
+                         y = halfH
+                         vy = abs(vy)
+                     } else if (y + halfH > height) {
+                         y = height - halfH
+                         vy = -abs(vy)
+                     }
+                 }
+
+                 // Continuous hue cycling while held OR creating
+                 val hue = if (isHeld) {
+                     ShapeColorAnimator.stepHue(shape.hue, safeDelta)
+                 } else {
+                     shape.hue
+                 }
+
+                 val (cvx, cvy) = ShapeVelocity.clamp(vx, vy, settings.maxVelocityPxPerSec.coerceIn(100, 3000).toFloat())
+                 shape.copy(
+                     x = x,
+                     y = y,
+                     vx = cvx,
+                     vy = cvy,
+                     hue = hue
+                 )
+             }.toMutableList()
+
+             resolvePairCollisions(moved, settings)
+             _shapes.value = moved.takeLast(settings.maxShapes.coerceIn(1, 100))
+         } catch (e: Exception) {
+             Log.e(TAG, "Error in updatePhysics", e)
+         }
+     }
 
     private fun checkAutoSpawn(now: Long, settings: AppSettings) {
         try {
@@ -413,27 +423,47 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun chooseType(selectedShapes: Set<ShapeType>, selectionMode: ShapeSelectionMode): ShapeType {
-        val shapesList = selectedShapes.toList()
-        if (shapesList.isEmpty()) {
-            Log.w(TAG, "No selected shapes available, defaulting to CIRCLE")
-            return ShapeType.CIRCLE // fallback
-        }
-        return when (selectionMode) {
-            ShapeSelectionMode.ALTERNATE -> {
-                val type = shapesList[lastTypeIndex % shapesList.size]
-                lastTypeIndex = (lastTypeIndex + 1) % shapesList.size
-                type
-            }
-            ShapeSelectionMode.RANDOM -> shapesList.random()
-        }
-    }
+     private fun chooseType(selectedShapes: Set<ShapeType>, selectionMode: ShapeSelectionMode): ShapeType {
+         val shapesList = selectedShapes.toList()
+         if (shapesList.isEmpty()) {
+             Log.w(TAG, "No selected shapes available, defaulting to CIRCLE")
+             return ShapeType.CIRCLE // fallback
+         }
+         return when (selectionMode) {
+             ShapeSelectionMode.ALTERNATE -> {
+                 val index = lastTypeIndex.getAndIncrement() % shapesList.size
+                 if (index < 0) lastTypeIndex.set(0)
+                 shapesList[abs(index) % shapesList.size]
+             }
+             ShapeSelectionMode.RANDOM -> shapesList.random()
+         }
+     }
 
-    private fun pointInShape(point: Offset, shape: GameShape): Boolean {
-        val dx = point.x - shape.x
-        val dy = point.y - shape.y
-        return kotlin.math.abs(dx) <= shape.width / 2f && kotlin.math.abs(dy) <= shape.height / 2f
-    }
+     private fun pointInShape(point: Offset, shape: GameShape): Boolean {
+         val dx = point.x - shape.x
+         val dy = point.y - shape.y
+         val halfWidth = shape.width / 2f
+         val halfHeight = shape.height / 2f
+
+         return when (shape.type) {
+             ShapeType.CIRCLE -> {
+                 val radius = halfWidth
+                 hypot(dx, dy) <= radius
+             }
+             ShapeType.RECTANGLE -> {
+                 abs(dx) <= halfWidth && abs(dy) <= halfHeight
+             }
+             ShapeType.TRIANGLE -> {
+                 // Bounding box check for triangle
+                 abs(dx) <= halfWidth && dy <= halfHeight && dy >= -halfHeight / 2f
+             }
+             ShapeType.ARCH -> {
+                 // Arch is an arc - use approximate circular bounds
+                 val radius = halfWidth
+                 hypot(dx, dy) <= radius * 1.1f
+             }
+         }
+     }
 
     private fun calmSaturation(): Float = (0.55f + Random.nextFloat() * 0.18f).coerceIn(0f, 1f)
 
