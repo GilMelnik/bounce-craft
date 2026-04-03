@@ -12,8 +12,8 @@ android {
         applicationId = "com.colorbounce.baby"
         minSdk = 26
         targetSdk = 36
-        versionCode = 6
-        versionName = "2.1"
+        versionCode = 7
+        versionName = "2.3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -27,6 +27,11 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+
+            ndk {
+                debugSymbolLevel = "FULL"
+            }
+
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
