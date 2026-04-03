@@ -2,7 +2,6 @@ package com.colorbounce.baby
 
 import android.app.NotificationManager
 import android.content.Intent
-import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -89,7 +88,6 @@ class MainActivity : ComponentActivity() {
         try {
             super.onCreate(savedInstanceState)
             Log.d(TAG, "onCreate called")
-            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             settingsRepository = SettingsRepository(this)
             enableEdgeToEdge()
 
@@ -308,7 +306,7 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
                 color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp + systemBarsPadding.calculateBottomPadding())
+                    .padding(bottom = 32.dp)
                     .clickable {
                         val intent = Intent(
                             Intent.ACTION_VIEW,

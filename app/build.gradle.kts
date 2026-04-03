@@ -11,10 +11,15 @@ android {
         applicationId = "com.colorbounce.baby"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
+        versionCode = 6
         versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // Support for large screens and foldable devices
+        vectorDrawables {
+            useSupportLibrary = true
+        }
     }
 
     buildTypes {
