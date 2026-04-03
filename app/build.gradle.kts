@@ -6,12 +6,12 @@ plugins {
 
 android {
     namespace = "com.colorbounce.baby"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.colorbounce.baby"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 6
         versionName = "2.1"
 
