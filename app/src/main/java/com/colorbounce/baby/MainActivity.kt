@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -280,6 +281,13 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
                 verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Text(
+                    text = "Bounce Craft",
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(Modifier.height(32.dp))
                 Button(
                     modifier = Modifier.width(220.dp),
                     onClick = onPlay,
@@ -298,23 +306,20 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) { Text("Settings") }
-            }
-
-            Text(
-                text = "Enjoying the app? Buy me a coffee ☕",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 32.dp)
-                    .clickable {
+                Spacer(Modifier.height(32.dp))
+                Text(
+                    text = "Enjoying the app? Buy me a coffee ☕",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    modifier = Modifier.clickable {
                         val intent = Intent(
                             Intent.ACTION_VIEW,
                             "https://buymeacoffee.com/gilmelnik".toUri()
                         )
                         context.startActivity(intent)
                     }
-            )
+                )
+            }
         }
     }
 }
