@@ -445,12 +445,12 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         // Small always-visible exit affordance.
         Box(
             modifier = Modifier
-                .padding(12.dp)
+                .padding(top = 24.dp, end = 16.dp)
                 .size(34.dp)
                 .align(Alignment.TopEnd)
                 .zIndex(10f)
                 .testTag(EXIT_BUTTON_TAG)
-                .background(exitButtonBg, CircleShape)
+                .background(exitButtonBg.copy(alpha = 0.8f), CircleShape)
                 .clickable {
                     try {
                         Log.d(TAG, "Exit button clicked")
@@ -461,18 +461,18 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                 },
             contentAlignment = Alignment.Center
         ) {
-            Canvas(Modifier.size(18.dp)) {
+            Canvas(Modifier.size(20.dp)) {
                 drawLine(
                     color = onSurfaceVariant,
                     start = Offset(0f, 0f),
                     end = Offset(size.width, size.height),
-                    strokeWidth = 3f
+                    strokeWidth = 4f
                 )
                 drawLine(
                     color = onSurfaceVariant,
                     start = Offset(size.width, 0f),
                     end = Offset(0f, size.height),
-                    strokeWidth = 3f
+                    strokeWidth = 4f
                 )
             }
         }
