@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -61,7 +60,9 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
 import androidx.core.view.ViewCompat
@@ -278,16 +279,21 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
                         start = 24.dp,
                         end = 24.dp
                     ),
-                verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(Modifier.weight(0.25f))
                 Text(
                     text = "Bounce Craft",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    style = MaterialTheme.typography.displayLarge.copy(
+                        fontSize = 72.sp,
+                        lineHeight = 80.sp,
+                        letterSpacing = 2.sp
+                    ),
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.primary
                 )
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.weight(0.25f))
                 Button(
                     modifier = Modifier.width(220.dp),
                     onClick = onPlay,
@@ -306,18 +312,20 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) { Text("Settings") }
-                Spacer(Modifier.height(32.dp))
+                Spacer(Modifier.weight(0.5f))
                 Text(
                     text = "Enjoying the app? Buy me a coffee ☕",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
-                    modifier = Modifier.clickable {
-                        val intent = Intent(
-                            Intent.ACTION_VIEW,
-                            "https://buymeacoffee.com/gilmelnik".toUri()
-                        )
-                        context.startActivity(intent)
-                    }
+                    modifier = Modifier
+                        .padding(bottom = 32.dp)
+                        .clickable {
+                            val intent = Intent(
+                                Intent.ACTION_VIEW,
+                                "https://buymeacoffee.com/gilmelnik".toUri()
+                            )
+                            context.startActivity(intent)
+                        }
                 )
             }
         }
