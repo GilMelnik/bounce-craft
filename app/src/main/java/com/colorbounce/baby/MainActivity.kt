@@ -227,7 +227,11 @@ private fun ColorBounceApp(
             MainMenuScreen(
                 onPlay = {
                     Log.d(TAG, "Navigating to game screen")
-                    navController.navigate("game")
+//                    if (settings.tutorialSeen) {
+//                        navController.navigate("game")
+//                    } else {
+                        navController.navigate("tutorial")
+//                    }
                 },
                 onSettings = {
                     Log.d(TAG, "Navigating to settings screen")
@@ -242,6 +246,20 @@ private fun ColorBounceApp(
                 onBack = {
                     Log.d(TAG, "Navigating back from settings")
                     navController.popBackStack()
+                }
+            )
+        }
+        composable("tutorial") {
+            val scope = rememberCoroutineScope()
+            TutorialScreen(
+                onDismiss = {
+                    Log.d(TAG, "Tutorial dismissed, navigating to game")
+                    scope.launch {
+                        settingsRepository.markTutorialSeen()
+                    }
+                    navController.navigate("game") {
+                        popUpTo("tutorial") { inclusive = true }
+                    }
                 }
             )
         }

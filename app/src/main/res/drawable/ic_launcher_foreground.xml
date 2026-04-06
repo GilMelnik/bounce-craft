@@ -4,19 +4,33 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+
+    <!-- White circular background -->
     <path
-        android:fillColor="#FFFFFFFF"
-        android:pathData="M54,14a40,40 0 1,0 0,80a40,40 0 1,0 0,-80z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,54m-44,0a44,44 0 1,1 88,0a44,44 0 1,1 -88,0" />
+
+    <!-- Dominant blue arch (left side) -->
     <path
-        android:fillColor="#FF3B82F6"
-        android:pathData="M38,38a16,16 0 1,0 0,32a16,16 0 1,0 0,-32z" />
+        android:strokeColor="#3B82F6"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M18,54a20,20 0 0,1 40,0" />
+
+    <!-- Orange equilateral triangle (top-right, floating) -->
     <path
-        android:fillColor="#FFF97316"
-        android:pathData="M66,38h18v18h-18z" />
+        android:fillColor="#F97316"
+        android:pathData="M74,20l12,21h-24z" />
+
+    <!-- Green circle (right-center) -->
     <path
-        android:fillColor="#FF10B981"
-        android:pathData="M56,62c10,0 18,8 18,18h-8c0,-5.5 -4.5,-10 -10,-10s-10,4.5 -10,10h-8c0,-10 8,-18 18,-18z" />
+        android:fillColor="#10B981"
+        android:pathData="M78,62m-11,0a11,11 0 1,1 22,0a11,11 0 1,1 -22,0" />
+
+    <!-- Large purple diamond square (lower-center-left) -->
     <path
-        android:fillColor="#FFEC4899"
-        android:pathData="M20,58c4,-10 11,-16 21,-19l2,6c-7.5,2.4 -13.1,7.6 -16.4,15.9z" />
+        android:fillColor="#A855F7"
+        android:pathData="M32,78l16,-16l16,16l-16,16z" />
+
 </vector>

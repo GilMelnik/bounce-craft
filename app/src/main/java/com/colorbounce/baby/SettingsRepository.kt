@@ -25,13 +25,10 @@ class SettingsRepository(private val context: Context) {
         val disableNotifications = booleanPreferencesKey("disable_notifications")
         val autoSpawnSeconds = intPreferencesKey("auto_spawn_seconds")
         val maxVelocity = intPreferencesKey("max_velocity")
+        val tutorialSeen = booleanPreferencesKey("tutorial_seen")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map(::toSettings)
-
-    suspend fun updateShapeMode(mode: ShapeMode) {
-        context.dataStore.edit { it[Keys.shapeMode] = mode.name }
-    }
 
     suspend fun updateTimeoutSeconds(seconds: Int) {
         context.dataStore.edit { it[Keys.timeoutSeconds] = seconds.coerceIn(3, 60) }
@@ -74,6 +71,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.shapeSelectionMode] = mode.name }
     }
 
+    suspend fun markTutorialSeen() {
+        context.dataStore.edit { it[Keys.tutorialSeen] = true }
+    }
+
     private fun toSettings(prefs: Preferences): AppSettings {
         val shapeMode = runCatching {
             ShapeMode.valueOf(prefs[Keys.shapeMode] ?: ShapeMode.ALTERNATING.name)
@@ -103,7 +104,8 @@ class SettingsRepository(private val context: Context) {
             lockApp = prefs[Keys.lockApp] ?: true,
             disableNotifications = prefs[Keys.disableNotifications] ?: false,
             autoSpawnInactivitySeconds = prefs[Keys.autoSpawnSeconds] ?: 8,
-            maxVelocityPxPerSec = prefs[Keys.maxVelocity] ?: 1200
+            maxVelocityPxPerSec = prefs[Keys.maxVelocity] ?: 1200,
+            tutorialSeen = prefs[Keys.tutorialSeen] ?: false
         )
     }
 }
