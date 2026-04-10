@@ -10,15 +10,18 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,6 +38,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -501,6 +505,8 @@ private fun TutorialStepLayout(
     windowContent: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -512,36 +518,86 @@ private fun TutorialStepLayout(
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
         ) {
-            Spacer(Modifier.height(130.dp))
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                color = scheme.primary,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(16.dp))
-            Text(
-                text = body,
-                style = MaterialTheme.typography.bodyLarge,
-                color = scheme.onBackground,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(40.dp))
+            if (isLandscape) {
+                Spacer(Modifier.height(56.dp))
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(0.42f)
+                            .fillMaxHeight()
+                    ) {
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = scheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = body,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = scheme.onBackground,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        TutorialFooter(step = step)
+                    }
 
-            TutorialWindow(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                onOutsideTap = onOutsideTap,
-                content = windowContent
-            )
+                    Spacer(Modifier.width(24.dp))
 
-            Spacer(Modifier.height(30.dp))
-            TutorialFooter(step = step)
-            Spacer(Modifier.height(110.dp))
+                    TutorialWindow(
+                        modifier = Modifier
+                            .weight(0.58f)
+                            .fillMaxHeight()
+                            .padding(vertical = 18.dp),
+                        onOutsideTap = onOutsideTap,
+                        content = windowContent
+                    )
+                }
+                Spacer(Modifier.height(20.dp))
+            } else {
+                Spacer(Modifier.height(130.dp))
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = scheme.primary,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = body,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = scheme.onBackground,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(40.dp))
+
+                TutorialWindow(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    onOutsideTap = onOutsideTap,
+                    content = windowContent
+                )
+
+                Spacer(Modifier.height(30.dp))
+            }
+
+            if (!isLandscape) {
+                TutorialFooter(step = step)
+                Spacer(Modifier.height(110.dp))
+            }
         }
     }
 }
@@ -554,7 +610,14 @@ private fun TutorialWindow(
 ) {
     val scheme = MaterialTheme.colorScheme
 
-    Box(modifier = modifier) {
+    BoxWithConstraints(modifier = modifier) {
+        val windowAspectRatio = 1.2f
+        val outerMargin = 12.dp
+        val maxWindowWidth = maxOf(0.dp, maxWidth - outerMargin * 2)
+        val maxWindowHeight = maxOf(0.dp, maxHeight - outerMargin * 2)
+        val windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
+        val windowHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
+
         // Transparent layer to catch taps outside the mini-window area
         Box(
             modifier = Modifier
@@ -564,12 +627,11 @@ private fun TutorialWindow(
                 }
         )
 
-        // The centered mini window
+        // Adaptive mini window that always fits within the available bounds
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .fillMaxWidth(0.86f)
-                .aspectRatio(1.2f)
+                .size(width = windowWidth, height = windowHeight)
                 .background(
                     color = scheme.surfaceVariant.copy(alpha = 0.22f),
                     shape = RoundedCornerShape(22.dp)
