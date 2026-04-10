@@ -2,35 +2,54 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
+    android:viewportWidth="100"
+    android:viewportHeight="100">
 
-    <!-- White circular background -->
+    <!-- Background circle -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M54,54m-44,0a44,44 0 1,1 88,0a44,44 0 1,1 -88,0" />
+        android:fillColor="#ECECEC"
+        android:pathData="M50,0
+                          A50,50 0 1,1 49.9,0 Z" />
 
-    <!-- North-west: arch with top pushed outward -->
-    <path
-        android:strokeColor="#3B82F6"
-        android:strokeWidth="7"
-        android:strokeLineCap="round"
-        android:fillColor="@android:color/transparent"
-        android:pathData="M20,44a16,14 0 0,1 28,-8" />
+    <group
+        android:pivotX="50"
+        android:pivotY="50"
+        android:scaleX="0.70"
+        android:scaleY="0.70">
 
-    <!-- North-east: outward-pointing triangle -->
-    <path
-        android:fillColor="#F97316"
-        android:pathData="M70,28l18,6l-14,14z" />
+        <!-- Blue right arc -->
+        <path
+            android:fillColor="#12A8E0"
+            android:fillType="evenOdd"
+            android:pathData="
+                M52,12
+                A23,23 0 0,1 52,58
+                L52,50
+                A15,15 0 0,0 52,20
+                Z" />
 
-    <!-- South-east: green circle shifted outward -->
-    <path
-        android:fillColor="#10B981"
-        android:pathData="M74,74m-11,0a11,11 0 1,1 22,0a11,11 0 1,1 -22,0" />
+        <!-- Green center circle -->
+        <path
+            android:fillColor="#08B34B"
+            android:pathData="M54,34
+                              m-9,0
+                              a9,9 0 1,0 18,0
+                              a9,9 0 1,0 -18,0" />
 
-    <!-- South-west: square corner pointing outward -->
-    <path
-        android:fillColor="#A855F7"
-        android:pathData="M22,72l14,-14l14,14l-14,14z" />
+        <!-- Purple tilted square -->
+        <group
+            android:pivotX="34"
+            android:pivotY="40"
+            android:rotation="-20">
+            <path
+                android:fillColor="#6F32A8"
+                android:pathData="M24,30 H44 V50 H24 Z" />
+        </group>
+
+        <!-- Orange inverted triangle -->
+        <path
+            android:fillColor="#F68A00"
+            android:pathData="M33,61 L63,61 L48,87 Z" />
+    </group>
 
 </vector>
