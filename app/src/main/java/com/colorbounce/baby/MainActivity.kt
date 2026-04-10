@@ -46,8 +46,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -80,6 +83,7 @@ import kotlin.math.min
 
 private const val GAME_SURFACE_TAG = "game_surface"
 private const val EXIT_BUTTON_TAG = "exit_button"
+private const val TUTORIAL_BUTTON_TAG = "tutorial_button"
 private const val TAG = "MainActivity"
 
 class MainActivity : ComponentActivity() {
@@ -217,6 +221,7 @@ private fun ColorBounceApp(
     val currentBackstack by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val route = currentBackstack?.destination?.route ?: "menu"
     val inGame = route == "game"
+    var tutorialExitTarget by rememberSaveable { mutableStateOf("game") }
     LaunchedEffect(inGame, settings.lockApp, settings.keepScreenOn) {
         onApplyWindowMode(inGame)
         if (inGame) onBestEffortDisableNotifications()
@@ -226,16 +231,22 @@ private fun ColorBounceApp(
         composable("menu") {
             MainMenuScreen(
                 onPlay = {
-                    Log.d(TAG, "Navigating to game screen")
-//                    if (settings.tutorialSeen) {
-//                        navController.navigate("game")
-//                    } else {
+                    Log.d(TAG, "Play clicked")
+                    if (settings.tutorialSeen) {
+                        navController.navigate("game")
+                    } else {
+                        tutorialExitTarget = "game"
                         navController.navigate("tutorial")
-//                    }
+                    }
                 },
                 onSettings = {
                     Log.d(TAG, "Navigating to settings screen")
                     navController.navigate("settings")
+                },
+                onTutorial = {
+                    Log.d(TAG, "Tutorial replay requested")
+                    tutorialExitTarget = "menu"
+                    navController.navigate("tutorial")
                 }
             )
         }
@@ -253,12 +264,16 @@ private fun ColorBounceApp(
             val scope = rememberCoroutineScope()
             TutorialScreen(
                 onDismiss = {
-                    Log.d(TAG, "Tutorial dismissed, navigating to game")
+                    Log.d(TAG, "Tutorial dismissed")
                     scope.launch {
                         settingsRepository.markTutorialSeen()
                     }
-                    navController.navigate("game") {
-                        popUpTo("tutorial") { inclusive = true }
+                    if (tutorialExitTarget == "game") {
+                        navController.navigate("game") {
+                            popUpTo("tutorial") { inclusive = true }
+                        }
+                    } else {
+                        navController.popBackStack()
                     }
                 }
             )
@@ -277,7 +292,7 @@ private fun ColorBounceApp(
 }
 
 @Composable
-private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
+private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit, onTutorial: () -> Unit) {
     val context = LocalContext.current
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
 
@@ -288,6 +303,30 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit) {
         contentColor = MaterialTheme.colorScheme.onBackground
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(
+                        top = systemBarsPadding.calculateTopPadding() + 12.dp,
+                        end = 12.dp
+                    )
+                    .size(36.dp)
+                    .testTag(TUTORIAL_BUTTON_TAG)
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
+                        CircleShape
+                    )
+                    .clickable(onClick = onTutorial),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "?",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+
             Column(
                 modifier = Modifier
                     .fillMaxSize()

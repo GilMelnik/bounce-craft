@@ -10,27 +10,27 @@
         android:fillColor="#FFFFFF"
         android:pathData="M54,54m-44,0a44,44 0 1,1 88,0a44,44 0 1,1 -88,0" />
 
-    <!-- Dominant blue arch (left side) -->
+    <!-- North-west: arch with top pushed outward -->
     <path
         android:strokeColor="#3B82F6"
-        android:strokeWidth="8"
+        android:strokeWidth="7"
         android:strokeLineCap="round"
         android:fillColor="@android:color/transparent"
-        android:pathData="M18,54a20,20 0 0,1 40,0" />
+        android:pathData="M20,44a16,14 0 0,1 28,-8" />
 
-    <!-- Orange equilateral triangle (top-right, floating) -->
+    <!-- North-east: outward-pointing triangle -->
     <path
         android:fillColor="#F97316"
-        android:pathData="M74,20l12,21h-24z" />
+        android:pathData="M70,28l18,6l-14,14z" />
 
-    <!-- Green circle (right-center) -->
+    <!-- South-east: green circle shifted outward -->
     <path
         android:fillColor="#10B981"
-        android:pathData="M78,62m-11,0a11,11 0 1,1 22,0a11,11 0 1,1 -22,0" />
+        android:pathData="M74,74m-11,0a11,11 0 1,1 22,0a11,11 0 1,1 -22,0" />
 
-    <!-- Large purple diamond square (lower-center-left) -->
+    <!-- South-west: square corner pointing outward -->
     <path
         android:fillColor="#A855F7"
-        android:pathData="M32,78l16,-16l16,16l-16,16z" />
+        android:pathData="M22,72l14,-14l14,14l-14,14z" />
 
 </vector>
