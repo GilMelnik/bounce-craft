@@ -427,7 +427,6 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .testTag(GAME_SURFACE_TAG)
             .background(MaterialTheme.colorScheme.background)
             .onSizeChanged {
                 try {
@@ -436,37 +435,43 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                     Log.e(TAG, "Error in onSizeChanged", e)
                 }
             }
-            .pointerInput(settings.shapeMode, settings.maxShapes) {
-                awaitPointerEventScope {
-                    try {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { change ->
-                                val pointerId = change.id.value
-                                when {
-                                    change.pressed && !change.previousPressed -> {
-                                        // start
-                                        viewModel.startInteraction(change.position, settings, pointerId)
-                                    }
-                                    change.pressed && change.previousPressed -> {
-                                        // drag
-                                        val dragAmount = change.position - change.previousPosition
-                                        viewModel.onDrag(change.position, dragAmount, settings, pointerId)
-                                    }
-                                    !change.pressed && change.previousPressed -> {
-                                        // end
-                                        viewModel.endInteraction(settings, pointerId)
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .testTag(GAME_SURFACE_TAG)
+                .pointerInput(settings.shapeMode, settings.maxShapes) {
+                    awaitPointerEventScope {
+                        try {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { change ->
+                                    val pointerId = change.id.value
+                                    when {
+                                        change.pressed && !change.previousPressed -> {
+                                            // start
+                                            viewModel.startInteraction(change.position, settings, pointerId)
+                                        }
+
+                                        change.pressed && change.previousPressed -> {
+                                            // drag
+                                            val dragAmount = change.position - change.previousPosition
+                                            viewModel.onDrag(change.position, dragAmount, settings, pointerId)
+                                        }
+
+                                        !change.pressed && change.previousPressed -> {
+                                            // end
+                                            viewModel.endInteraction(settings, pointerId)
+                                        }
                                     }
                                 }
                             }
+                        } catch (_: Exception) {
+                            // Expected when pointerInput scope is cancelled
                         }
-                    } catch (_: Exception) {
-                        // Expected when pointerInput scope is cancelled
                     }
                 }
-            }
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
+        ) {
             shapes.forEach { shape ->
                 val topLeft = Offset(shape.x - shape.width / 2f, shape.y - shape.height / 2f)
                 when (shape.type) {
