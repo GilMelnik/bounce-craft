@@ -26,8 +26,29 @@ class GameViewModel : ViewModel() {
      private val lastDragDeltas = mutableMapOf<Long, Offset>()
      private var screenSize = Offset(1f, 1f)
 
-     private var lastUserInteractionMillis = System.currentTimeMillis()
-     private var lastAutoSpawnMillis = System.currentTimeMillis()
+     private var gameTimeMillis = 0L
+     private var gameTimeRemainderMillis = 0f
+     private var lastUserInteractionGameMillis = 0L
+     private var lastAutoSpawnGameMillis = 0L
+
+     fun onGameExit() {
+         try {
+             clearInteractionState()
+             resetAutoSpawnTimers()
+             Log.d(TAG, "Game exited at gameTime=$gameTimeMillis")
+         } catch (e: Exception) {
+             Log.e(TAG, "Error in onGameExit", e)
+         }
+     }
+
+     fun onGameEnter() {
+         try {
+             resetAutoSpawnTimers()
+             Log.d(TAG, "Game entered at gameTime=$gameTimeMillis")
+         } catch (e: Exception) {
+             Log.e(TAG, "Error in onGameEnter", e)
+         }
+     }
 
     fun setScreenSize(width: Float, height: Float) {
         try {
@@ -68,7 +89,7 @@ class GameViewModel : ViewModel() {
              } else {
                  point
              }
-             val now = System.currentTimeMillis()
+             val now = currentGameTimeMillis()
              val hue = Random.nextFloat() * 360f
              val newShape = GameShape(
                  id = nextId++,
@@ -110,7 +131,7 @@ class GameViewModel : ViewModel() {
             val startPoint = startPoints[pointerId] ?: return
             val dragDistance = (point - startPoint).getDistance()
             val computedSize = dragDistance.coerceIn(40f, 500f)
-            val now = System.currentTimeMillis()
+            val now = currentGameTimeMillis()
             _shapes.value = _shapes.value.map { shape ->
                 if (shape.id != shapeId) return@map shape
                 val isNewish = shape.vx == 0f && shape.vy == 0f
@@ -158,7 +179,7 @@ class GameViewModel : ViewModel() {
                      it.copy(
                          vx = vx,
                          vy = vy,
-                         lastInteractionMillis = System.currentTimeMillis()
+                          lastInteractionMillis = currentGameTimeMillis()
                      )
                  } else {
                      it
@@ -196,7 +217,7 @@ class GameViewModel : ViewModel() {
              }
 
              val timeoutMs = settings.shapeTimeoutSeconds.coerceIn(1, 120) * 1000L
-             val now = System.currentTimeMillis()
+              val now = advanceGameClock(safeDelta)
 
              checkAutoSpawn(now, settings)
 
@@ -264,13 +285,13 @@ class GameViewModel : ViewModel() {
         try {
             val inactivityTimeoutMs = settings.autoSpawnInactivitySeconds * 1000L
             if (inactivityTimeoutMs <= 0) return // Auto spawn disabled
-            if (now - lastUserInteractionMillis > inactivityTimeoutMs) {
-                if (now - lastAutoSpawnMillis > inactivityTimeoutMs) {
+            if (now - lastUserInteractionGameMillis > inactivityTimeoutMs) {
+                if (now - lastAutoSpawnGameMillis > inactivityTimeoutMs) {
                     spawnRandomShape(settings)
-                    lastAutoSpawnMillis = now
+                    lastAutoSpawnGameMillis = now
                 }
             } else {
-                lastAutoSpawnMillis = now
+                lastAutoSpawnGameMillis = now
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error in checkAutoSpawn", e)
@@ -312,7 +333,7 @@ class GameViewModel : ViewModel() {
                 hue = Random.nextFloat() * 360f,
                 saturation = calmSaturation(),
                 value = calmValue(),
-                lastInteractionMillis = System.currentTimeMillis()
+                lastInteractionMillis = currentGameTimeMillis()
             )
             _shapes.value = (_shapes.value + newShape).takeLast(settings.maxShapes)
             Log.d(TAG, "Auto-spawned shape: id=${newShape.id}, type=${newShape.type}, totalShapes=${_shapes.value.size}")
@@ -322,7 +343,31 @@ class GameViewModel : ViewModel() {
     }
 
     private fun recordInteraction() {
-        lastUserInteractionMillis = System.currentTimeMillis()
+        lastUserInteractionGameMillis = currentGameTimeMillis()
+    }
+
+    private fun resetAutoSpawnTimers() {
+        val now = currentGameTimeMillis()
+        lastUserInteractionGameMillis = now
+        lastAutoSpawnGameMillis = now
+    }
+
+    private fun clearInteractionState() {
+        activeShapes.clear()
+        startPoints.clear()
+        lastDragDeltas.clear()
+    }
+
+    private fun currentGameTimeMillis(): Long = gameTimeMillis
+
+    private fun advanceGameClock(deltaSeconds: Float): Long {
+        gameTimeRemainderMillis += deltaSeconds * 1000f
+        val wholeMillis = gameTimeRemainderMillis.toLong()
+        if (wholeMillis > 0L) {
+            gameTimeMillis += wholeMillis
+            gameTimeRemainderMillis -= wholeMillis.toFloat()
+        }
+        return gameTimeMillis
     }
 
     private fun resolvePairCollisions(shapes: MutableList<GameShape>, settings: AppSettings) {
@@ -452,7 +497,7 @@ class GameViewModel : ViewModel() {
     }
 
     private fun updateInteractionTime(id: Long) {
-        val now = System.currentTimeMillis()
+        val now = currentGameTimeMillis()
         _shapes.value = _shapes.value.map {
             if (it.id == id) {
                 it.copy(lastInteractionMillis = now)

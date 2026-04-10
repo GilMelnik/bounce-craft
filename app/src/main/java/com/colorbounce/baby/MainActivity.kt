@@ -47,6 +47,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -222,6 +223,18 @@ private fun ColorBounceApp(
     val route = currentBackstack?.destination?.route ?: "menu"
     val inGame = route == "game"
     var tutorialExitTarget by rememberSaveable { mutableStateOf("game") }
+    var previousInGame by remember { mutableStateOf<Boolean?>(null) }
+
+    LaunchedEffect(inGame) {
+        val previous = previousInGame
+        when {
+            previous == null && inGame -> gameViewModel.onGameEnter()
+            previous == true && !inGame -> gameViewModel.onGameExit()
+            previous == false && inGame -> gameViewModel.onGameEnter()
+        }
+        previousInGame = inGame
+    }
+
     LaunchedEffect(inGame, settings.lockApp, settings.keepScreenOn) {
         onApplyWindowMode(inGame)
         if (inGame) onBestEffortDisableNotifications()
