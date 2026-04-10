@@ -85,7 +85,13 @@ class GameViewModel : ViewModel() {
          }
      }
 
-    fun onDrag(point: Offset, dragAmount: Offset, settings: AppSettings, pointerId: Long) {
+    fun onDrag(
+        point: Offset,
+        dragAmount: Offset,
+        settings: AppSettings,
+        pointerId: Long,
+        resizeOnDrag: Boolean = true
+    ) {
         try {
             recordInteraction()
             val shapeId = activeShapes[pointerId] ?: return
@@ -100,8 +106,8 @@ class GameViewModel : ViewModel() {
                 shape.copy(
                     x = point.x,
                     y = point.y,
-                    width = if (isNewish) computedSize else shape.width,
-                    height = if (isNewish) computedSize else shape.height,
+                    width = if (resizeOnDrag && isNewish) computedSize else shape.width,
+                    height = if (resizeOnDrag && isNewish) computedSize else shape.height,
                     lastInteractionMillis = now
                 )
             }

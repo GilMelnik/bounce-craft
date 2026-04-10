@@ -29,6 +29,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
@@ -322,6 +323,9 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
     var colorShifted by remember { mutableStateOf(false) }
     var stageCompleted by remember { mutableStateOf(false) }
 
+    val latestShapes by rememberUpdatedState(shapes)
+    val latestStageCompleted by rememberUpdatedState(stageCompleted)
+
     val infinite = rememberInfiniteTransition(label = "tutorial_move_shape")
     val handProgress by infinite.animateFloat(
         initialValue = 0f,
@@ -390,39 +394,50 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { playgroundSize = it }
-                .pointerInput(playgroundSize, stageCompleted, shapes) {
+                .pointerInput(playgroundSize, settings) {
                     awaitPointerEventScope {
+                        var activePointerId: Long? = null
                         while (true) {
                             val event = awaitPointerEvent()
                             event.changes.forEach { change ->
                                 val pointerId = change.id.value + 4_000L
                                 when {
                                     change.pressed && !change.previousPressed -> {
-                                        if (!stageCompleted) {
+                                        if (!latestStageCompleted && activePointerId == null) {
                                             // Only allow interaction if we hit the existing shape
-                                            val hit = shapes.find { shape ->
+                                            val hit = latestShapes.find { shape ->
                                                 val dx = change.position.x - shape.x
                                                 val dy = change.position.y - shape.y
                                                 hypot(dx, dy) < (shape.width / 2f) * 1.6f
                                             }
                                             if (hit != null) {
                                                 viewModel.startInteraction(change.position, settings, pointerId)
+                                                activePointerId = pointerId
                                                 change.consume()
                                             }
                                         }
                                     }
 
                                     change.pressed && change.previousPressed -> {
-                                        if (!stageCompleted) {
+                                        if (activePointerId == pointerId) {
                                             val dragAmount = change.position - change.previousPosition
-                                            viewModel.onDrag(change.position, dragAmount, settings, pointerId)
+                                            viewModel.onDrag(
+                                                point = change.position,
+                                                dragAmount = dragAmount,
+                                                settings = settings,
+                                                pointerId = pointerId,
+                                                resizeOnDrag = false
+                                            )
                                             change.consume()
                                         }
                                     }
 
                                     !change.pressed && change.previousPressed -> {
-                                        viewModel.endInteraction(settings, pointerId)
-                                        change.consume()
+                                        if (activePointerId == pointerId) {
+                                            viewModel.endInteraction(settings, pointerId)
+                                            activePointerId = null
+                                            change.consume()
+                                        }
                                     }
                                 }
                             }
