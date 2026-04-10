@@ -42,7 +42,12 @@ class GameViewModel : ViewModel() {
         }
     }
 
-     fun startInteraction(point: Offset, settings: AppSettings, pointerId: Long) {
+     fun startInteraction(
+         point: Offset,
+         settings: AppSettings,
+         pointerId: Long,
+         constrainInsideScreen: Boolean = false
+     ) {
          try {
              recordInteraction()
              val current = _shapes.value
@@ -58,13 +63,18 @@ class GameViewModel : ViewModel() {
 
              val newType = chooseType(settings.selectedShapes, settings.shapeSelectionMode)
              val size = 70f
+             val spawnPoint = if (constrainInsideScreen) {
+                 clampPointInsideScreen(point, size / 2f, size / 2f)
+             } else {
+                 point
+             }
              val now = System.currentTimeMillis()
              val hue = Random.nextFloat() * 360f
              val newShape = GameShape(
                  id = nextId++,
                  type = newType,
-                 x = point.x,
-                 y = point.y,
+                 x = spawnPoint.x,
+                 y = spawnPoint.y,
                  width = size,
                  height = size,
                  vx = 0f,
@@ -90,7 +100,8 @@ class GameViewModel : ViewModel() {
         dragAmount: Offset,
         settings: AppSettings,
         pointerId: Long,
-        resizeOnDrag: Boolean = true
+        resizeOnDrag: Boolean = true,
+        constrainInsideScreen: Boolean = false
     ) {
         try {
             recordInteraction()
@@ -103,11 +114,22 @@ class GameViewModel : ViewModel() {
             _shapes.value = _shapes.value.map { shape ->
                 if (shape.id != shapeId) return@map shape
                 val isNewish = shape.vx == 0f && shape.vy == 0f
+                val targetSize = if (resizeOnDrag && isNewish) computedSize else shape.width
+                val boundedSize = if (constrainInsideScreen) {
+                    targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
+                } else {
+                    targetSize
+                }
+                val boundedPoint = if (constrainInsideScreen) {
+                    clampPointInsideScreen(point, boundedSize / 2f, boundedSize / 2f)
+                } else {
+                    point
+                }
                 shape.copy(
-                    x = point.x,
-                    y = point.y,
-                    width = if (resizeOnDrag && isNewish) computedSize else shape.width,
-                    height = if (resizeOnDrag && isNewish) computedSize else shape.height,
+                    x = boundedPoint.x,
+                    y = boundedPoint.y,
+                    width = if (resizeOnDrag && isNewish) boundedSize else shape.width,
+                    height = if (resizeOnDrag && isNewish) boundedSize else shape.height,
                     lastInteractionMillis = now
                 )
             }
@@ -411,6 +433,17 @@ class GameViewModel : ViewModel() {
         return shape.copy(
             x = min(max(shape.x, halfW), screenSize.x - halfW),
             y = min(max(shape.y, halfH), screenSize.y - halfH)
+        )
+    }
+
+    private fun clampPointInsideScreen(point: Offset, halfW: Float, halfH: Float): Offset {
+        val minX = halfW
+        val maxX = (screenSize.x - halfW).coerceAtLeast(minX)
+        val minY = halfH
+        val maxY = (screenSize.y - halfH).coerceAtLeast(minY)
+        return Offset(
+            x = point.x.coerceIn(minX, maxX),
+            y = point.y.coerceIn(minY, maxY)
         )
     }
 

@@ -254,7 +254,12 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
                                 when {
                                     change.pressed && !change.previousPressed -> {
                                         if (!stageCompleted && shapes.isEmpty()) {
-                                            viewModel.startInteraction(change.position, settings, pointerId)
+                                            viewModel.startInteraction(
+                                                point = change.position,
+                                                settings = settings,
+                                                pointerId = pointerId,
+                                                constrainInsideScreen = true
+                                            )
                                             change.consume()
                                         }
                                     }
@@ -262,7 +267,13 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
                                     change.pressed && change.previousPressed -> {
                                         if (!stageCompleted) {
                                             val dragAmount = change.position - change.previousPosition
-                                            viewModel.onDrag(change.position, dragAmount, settings, pointerId)
+                                            viewModel.onDrag(
+                                                point = change.position,
+                                                dragAmount = dragAmount,
+                                                settings = settings,
+                                                pointerId = pointerId,
+                                                constrainInsideScreen = true
+                                            )
                                             change.consume()
                                         }
                                     }
@@ -344,7 +355,12 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                 val start = Offset(playgroundSize.width * 0.5f, playgroundSize.height * 0.5f)
                 initialCenter = start
                 val pointerId = 3001L
-                viewModel.startInteraction(start, settings, pointerId)
+                viewModel.startInteraction(
+                    point = start,
+                    settings = settings,
+                    pointerId = pointerId,
+                    constrainInsideScreen = true
+                )
                 viewModel.endInteraction(settings, pointerId)
             }
         }
@@ -411,7 +427,12 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                                                 hypot(dx, dy) < (shape.width / 2f) * 1.6f
                                             }
                                             if (hit != null) {
-                                                viewModel.startInteraction(change.position, settings, pointerId)
+                                                viewModel.startInteraction(
+                                                    point = change.position,
+                                                    settings = settings,
+                                                    pointerId = pointerId,
+                                                    constrainInsideScreen = true
+                                                )
                                                 activePointerId = pointerId
                                                 change.consume()
                                             }
@@ -426,7 +447,8 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                                                 dragAmount = dragAmount,
                                                 settings = settings,
                                                 pointerId = pointerId,
-                                                resizeOnDrag = false
+                                                resizeOnDrag = false,
+                                                constrainInsideScreen = true
                                             )
                                             change.consume()
                                         }
