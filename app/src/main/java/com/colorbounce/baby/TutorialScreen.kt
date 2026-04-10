@@ -47,7 +47,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
@@ -507,6 +509,7 @@ private fun TutorialStepLayout(
     val scheme = MaterialTheme.colorScheme
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    var tutorialWindowBounds by remember { mutableStateOf<Rect?>(null) }
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -523,7 +526,15 @@ private fun TutorialStepLayout(
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .pointerInput(tutorialWindowBounds) {
+                            detectTapGestures { tapOffset ->
+                                val bounds = tutorialWindowBounds
+                                if (bounds == null || !bounds.contains(tapOffset)) {
+                                    onOutsideTap()
+                                }
+                            }
+                        },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
@@ -559,6 +570,7 @@ private fun TutorialStepLayout(
                             .fillMaxHeight()
                             .padding(vertical = 18.dp),
                         onOutsideTap = onOutsideTap,
+                        onBoundsChanged = { tutorialWindowBounds = it },
                         content = windowContent
                     )
                 }
@@ -606,11 +618,24 @@ private fun TutorialStepLayout(
 private fun TutorialWindow(
     modifier: Modifier,
     onOutsideTap: () -> Unit,
+    onBoundsChanged: (Rect) -> Unit = {},
     content: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
 
-    BoxWithConstraints(modifier = modifier) {
+    BoxWithConstraints(
+        modifier = modifier.onGloballyPositioned { coordinates ->
+            val position = coordinates.positionInParent()
+            onBoundsChanged(
+                Rect(
+                    left = position.x,
+                    top = position.y,
+                    right = position.x + coordinates.size.width,
+                    bottom = position.y + coordinates.size.height
+                )
+            )
+        }
+    ) {
         val windowAspectRatio = 1.2f
         val outerMargin = 12.dp
         val maxWindowWidth = maxOf(0.dp, maxWidth - outerMargin * 2)
