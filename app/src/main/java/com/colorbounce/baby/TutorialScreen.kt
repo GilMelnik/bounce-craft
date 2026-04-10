@@ -296,9 +296,8 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
                 )
             }
 
-            val speed = shapes.lastOrNull()?.let { hypot(it.vx.toDouble(), it.vy.toDouble()).toInt() } ?: 0
             Text(
-                text = if (stageCompleted) "Watching movement... ($speed px/s)" else "Drag then release to see trajectory",
+                text = if (stageCompleted) "" else "Drag then release to see trajectory",
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 12.dp),
@@ -338,12 +337,10 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
         if (playgroundSize.width > 0 && playgroundSize.height > 0) {
             viewModel.setScreenSize(playgroundSize.width.toFloat(), playgroundSize.height.toFloat())
             if (shapes.isEmpty()) {
-                val start = Offset(playgroundSize.width * 0.35f, playgroundSize.height * 0.55f)
+                val start = Offset(playgroundSize.width * 0.5f, playgroundSize.height * 0.5f)
                 initialCenter = start
                 val pointerId = 3001L
                 viewModel.startInteraction(start, settings, pointerId)
-                // Small move to ensure it's not "newish" and doesn't resize during drag
-                viewModel.onDrag(start + Offset(1f, 0f), Offset(1f, 0f), settings, pointerId)
                 viewModel.endInteraction(settings, pointerId)
             }
         }
@@ -393,7 +390,7 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
             modifier = Modifier
                 .fillMaxSize()
                 .onSizeChanged { playgroundSize = it }
-                .pointerInput(playgroundSize, stageCompleted) {
+                .pointerInput(playgroundSize, stageCompleted, shapes) {
                     awaitPointerEventScope {
                         while (true) {
                             val event = awaitPointerEvent()
@@ -402,8 +399,16 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                                 when {
                                     change.pressed && !change.previousPressed -> {
                                         if (!stageCompleted) {
-                                            viewModel.startInteraction(change.position, settings, pointerId)
-                                            change.consume()
+                                            // Only allow interaction if we hit the existing shape
+                                            val hit = shapes.find { shape ->
+                                                val dx = change.position.x - shape.x
+                                                val dy = change.position.y - shape.y
+                                                hypot(dx, dy) < (shape.width / 2f) * 1.6f
+                                            }
+                                            if (hit != null) {
+                                                viewModel.startInteraction(change.position, settings, pointerId)
+                                                change.consume()
+                                            }
                                         }
                                     }
 
@@ -470,7 +475,7 @@ private fun TutorialStepLayout(
                 .fillMaxSize()
                 .padding(horizontal = 24.dp)
         ) {
-            Spacer(Modifier.height(100.dp))
+            Spacer(Modifier.height(130.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.headlineSmall,
@@ -487,7 +492,7 @@ private fun TutorialStepLayout(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(32.dp))
+            Spacer(Modifier.height(40.dp))
 
             TutorialWindow(
                 modifier = Modifier
@@ -497,9 +502,9 @@ private fun TutorialStepLayout(
                 content = windowContent
             )
 
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(30.dp))
             TutorialFooter(step = step)
-            Spacer(Modifier.height(80.dp))
+            Spacer(Modifier.height(110.dp))
         }
     }
 }
@@ -513,7 +518,7 @@ private fun TutorialWindow(
     val scheme = MaterialTheme.colorScheme
 
     Box(modifier = modifier) {
-        // Transparent layer to catch taps outside the mini-window
+        // Transparent layer to catch taps outside the mini-window area
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -538,11 +543,8 @@ private fun TutorialWindow(
                     shape = RoundedCornerShape(22.dp)
                 )
                 .padding(12.dp)
-                .pointerInput(Unit) {
-                    // Consume taps inside so they don't trigger onOutsideTap
-                    detectTapGestures { /* consume */ }
-                }
         ) {
+            // No pointerInput here on the container to avoid blocking the content's input
             content()
         }
     }
@@ -597,7 +599,7 @@ private fun tutorialSettings(maxVelocity: Int = 1600): AppSettings = AppSettings
     selectedShapes = setOf(ShapeType.CIRCLE),
     shapeSelectionMode = ShapeSelectionMode.ALTERNATE,
     shapeTimeoutSeconds = 60,
-    maxShapes = 8,
+    maxShapes = 1,
     autoSpawnInactivitySeconds = 0,
     maxVelocityPxPerSec = maxVelocity
 )
