@@ -19,7 +19,11 @@ data class GameShape(
     val hue: Float,
     val saturation: Float,
     val value: Float,
-    val lastInteractionMillis: Long
+    val lastInteractionMillis: Long,
+    /** If true, shape is static in physics and only moves when the user drags it. */
+    val isPinned: Boolean = false,
+    /** If true, shape is not removed by shape timeout rules. */
+    val isImmortal: Boolean = false
 )
 
 val GameShape.color: Color

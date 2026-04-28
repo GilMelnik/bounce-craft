@@ -33,6 +33,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -55,10 +58,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -80,9 +79,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.min
 
-private const val GAME_SURFACE_TAG = "game_surface"
 private const val EXIT_BUTTON_TAG = "exit_button"
 private const val TUTORIAL_BUTTON_TAG = "tutorial_button"
 private const val TAG = "MainActivity"
@@ -221,7 +218,7 @@ private fun ColorBounceApp(
 ) {
     val currentBackstack by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val route = currentBackstack?.destination?.route ?: "menu"
-    val inGame = route == "game"
+    val inGame = route == "game" || route == "creation"
     var tutorialExitTarget by rememberSaveable { mutableStateOf("game") }
     var previousInGame by remember { mutableStateOf<Boolean?>(null) }
 
@@ -251,6 +248,10 @@ private fun ColorBounceApp(
                         tutorialExitTarget = "game"
                         navController.navigate("tutorial")
                     }
+                },
+                onCreation = {
+                    Log.d(TAG, "Creation Mode clicked")
+                    navController.navigate("creation")
                 },
                 onSettings = {
                     Log.d(TAG, "Navigating to settings screen")
@@ -301,12 +302,35 @@ private fun ColorBounceApp(
                 }
             )
         }
+        composable("creation") {
+            CreationModeScreen(
+                settings = settings,
+                viewModel = gameViewModel,
+                onExit = { navController.popBackStack() }
+            )
+        }
     }
 }
 
 @Composable
-private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit, onTutorial: () -> Unit) {
+private fun MainMenuScreen(
+    onPlay: () -> Unit,
+    onCreation: () -> Unit,
+    onSettings: () -> Unit,
+    onTutorial: () -> Unit
+) {
     val context = LocalContext.current
+    var showAbout by remember { mutableStateOf(false) }
+    val appVersion = remember {
+        try {
+            @Suppress("DEPRECATION")
+            context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .versionName
+        } catch (e: Exception) {
+            "—"
+        }
+    }
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
 
     // Surface sets LocalContentColor to onBackground for default text (light + dark).
@@ -372,16 +396,46 @@ private fun MainMenuScreen(onPlay: () -> Unit, onSettings: () -> Unit, onTutoria
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) { Text("Play") }
+                OutlinedButton(
+                    modifier = Modifier
+                        .width(220.dp)
+                        .padding(top = 12.dp),
+                    onClick = onCreation,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    )
+                ) { Text("Creation Mode") }
                 Button(
                     modifier = Modifier
                         .width(220.dp)
-                        .padding(top = 16.dp),
+                        .padding(top = 12.dp),
                     onClick = onSettings,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) { Text("Settings") }
+                TextButton(
+                    onClick = { showAbout = true },
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text("About", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+                }
+                if (showAbout) {
+                    AlertDialog(
+                        onDismissRequest = { showAbout = false },
+                        title = { Text("About Bounce Craft") },
+                        text = {
+                            Text(
+                                "A playful physics canvas for creating and bouncing shapes.\n\n" +
+                                    "Version $appVersion"
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(onClick = { showAbout = false }) { Text("OK") }
+                        }
+                    )
+                }
                 Spacer(Modifier.weight(0.5f))
                 Text(
                     text = "Enjoying the app? Buy me a coffee ☕",
@@ -436,10 +490,10 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                 }
             }
     ) {
-        Canvas(
+        GamePlayfield(
+            shapes = shapes,
             modifier = Modifier
                 .fillMaxSize()
-                .testTag(GAME_SURFACE_TAG)
                 .pointerInput(settings.shapeMode, settings.maxShapes) {
                     awaitPointerEventScope {
                         try {
@@ -449,73 +503,34 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                     val pointerId = change.id.value
                                     when {
                                         change.pressed && !change.previousPressed -> {
-                                            // start
-                                            viewModel.startInteraction(change.position, settings, pointerId)
+                                            viewModel.startInteraction(
+                                                change.position,
+                                                settings,
+                                                pointerId
+                                            )
                                         }
 
                                         change.pressed && change.previousPressed -> {
-                                            // drag
                                             val dragAmount = change.position - change.previousPosition
-                                            viewModel.onDrag(change.position, dragAmount, settings, pointerId)
+                                            viewModel.onDrag(
+                                                change.position,
+                                                dragAmount,
+                                                settings,
+                                                pointerId
+                                            )
                                         }
 
                                         !change.pressed && change.previousPressed -> {
-                                            // end
                                             viewModel.endInteraction(settings, pointerId)
                                         }
                                     }
                                 }
                             }
                         } catch (_: Exception) {
-                            // Expected when pointerInput scope is cancelled
                         }
                     }
                 }
-        ) {
-            shapes.forEach { shape ->
-                val topLeft = Offset(shape.x - shape.width / 2f, shape.y - shape.height / 2f)
-                when (shape.type) {
-                    ShapeType.CIRCLE -> drawCircle(
-                        color = shape.color,
-                        radius = shape.width / 2f,
-                        center = Offset(shape.x, shape.y)
-                    )
-
-                    ShapeType.RECTANGLE -> drawRect(
-                        color = shape.color,
-                        topLeft = topLeft,
-                        size = Size(shape.width, shape.height)
-                    )
-
-                    ShapeType.TRIANGLE -> {
-                        val path = Path().apply {
-                            moveTo(shape.x, shape.y - shape.height / 2f)
-                            lineTo(shape.x - shape.width / 2f, shape.y + shape.height / 2f)
-                            lineTo(shape.x + shape.width / 2f, shape.y + shape.height / 2f)
-                            close()
-                        }
-                        drawPath(path, color = shape.color)
-                    }
-
-                    ShapeType.ARCH -> {
-                        val centerX = shape.x
-                        val radius = shape.width / 2f
-                        val centerY = shape.y + radius
-
-                        val strokeWidth = min(shape.height, radius * 0.6f)
-                        drawArc(
-                            color = shape.color,
-                            startAngle = 180f,
-                            sweepAngle = 180f,
-                            useCenter = false, // critical: no filling
-                            topLeft = Offset(centerX - radius, centerY - radius),
-                            size = Size(radius * 2, radius * 2),
-                            style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
-                        )
-                    }
-                }
-            }
-        }
+        )
 
         // Small always-visible exit affordance.
         Box(

@@ -3,8 +3,11 @@ package com.colorbounce.baby
 import android.util.Log
 import androidx.compose.ui.geometry.Offset
 import androidx.lifecycle.ViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -16,37 +19,80 @@ import java.util.concurrent.atomic.AtomicInteger
 private const val TAG = "GameViewModel"
 
 class GameViewModel : ViewModel() {
-     private val _shapes = MutableStateFlow<List<GameShape>>(emptyList())
-     val shapes: StateFlow<List<GameShape>> = _shapes.asStateFlow()
+    private val _shapes = MutableStateFlow<List<GameShape>>(emptyList())
+    val shapes: StateFlow<List<GameShape>> = _shapes.asStateFlow()
 
-     private var nextId = 1L
-     private val lastTypeIndex = AtomicInteger(0)
-     private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
-     private val startPoints = mutableMapOf<Long, Offset>()
-     private val lastDragDeltas = mutableMapOf<Long, Offset>()
-     private var screenSize = Offset(1f, 1f)
+    private var nextId = 1L
+    private val lastTypeIndex = AtomicInteger(0)
+    private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
+    private val startPoints = mutableMapOf<Long, Offset>()
+    private val lastDragDeltas = mutableMapOf<Long, Offset>()
+    private var screenSize = Offset(1f, 1f)
 
-     private var gameTimeMillis = 0L
-     private var gameTimeRemainderMillis = 0f
-     private var lastUserInteractionGameMillis = 0L
-     private var lastAutoSpawnGameMillis = 0L
+    private var gameTimeMillis = 0L
+    private var gameTimeRemainderMillis = 0f
+    private var lastUserInteractionGameMillis = 0L
+    private var lastAutoSpawnGameMillis = 0L
+    private var inCreationModeSession = false
 
-     fun onGameExit() {
+    private val _creationAtCapacity = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val creationAtCapacity: SharedFlow<Unit> = _creationAtCapacity.asSharedFlow()
+
+    fun onGameExit() {
+        try {
+            clearInteractionState()
+            resetAutoSpawnTimers()
+            Log.d(TAG, "Game exited at gameTime=$gameTimeMillis")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onGameExit", e)
+        }
+    }
+
+    fun onGameEnter() {
+        try {
+            resetAutoSpawnTimers()
+            Log.d(TAG, "Game entered at gameTime=$gameTimeMillis")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in onGameEnter", e)
+        }
+    }
+
+    /**
+     * Clears the playfield and interaction state. Call when entering Creation Mode.
+     */
+     fun enterCreationMode() {
          try {
+             if (inCreationModeSession) return
+             inCreationModeSession = true
+             _shapes.value = emptyList()
+             nextId = 1L
+             lastTypeIndex.set(0)
              clearInteractionState()
+             gameTimeMillis = 0L
+             gameTimeRemainderMillis = 0f
              resetAutoSpawnTimers()
-             Log.d(TAG, "Game exited at gameTime=$gameTimeMillis")
+             Log.d(TAG, "enterCreationMode: reset sandbox")
          } catch (e: Exception) {
-             Log.e(TAG, "Error in onGameExit", e)
+             Log.e(TAG, "Error in enterCreationMode", e)
          }
      }
 
-     fun onGameEnter() {
+    /**
+     * Clears sandbox state so nothing carries into Play. Call when leaving Creation Mode.
+     */
+     fun exitCreationMode() {
          try {
+             inCreationModeSession = false
+             _shapes.value = emptyList()
+             nextId = 1L
+             lastTypeIndex.set(0)
+             clearInteractionState()
+             gameTimeMillis = 0L
+             gameTimeRemainderMillis = 0f
              resetAutoSpawnTimers()
-             Log.d(TAG, "Game entered at gameTime=$gameTimeMillis")
+             Log.d(TAG, "exitCreationMode: cleared")
          } catch (e: Exception) {
-             Log.e(TAG, "Error in onGameEnter", e)
+             Log.e(TAG, "Error in exitCreationMode", e)
          }
      }
 
@@ -63,58 +109,112 @@ class GameViewModel : ViewModel() {
         }
     }
 
-     fun startInteraction(
-         point: Offset,
-         settings: AppSettings,
-         pointerId: Long,
-         constrainInsideScreen: Boolean = false
-     ) {
-         try {
-             recordInteraction()
-             val current = _shapes.value
-             val hit = current.lastOrNull { pointInShape(point, it) }
-             if (hit != null) {
-                 Log.d(TAG, "Interaction: Tapped existing shape id=${hit.id}")
-                 activeShapes[pointerId] = hit.id
-                 startPoints[pointerId] = point
-                 lastDragDeltas[pointerId] = Offset.Zero
-                 updateInteractionTime(hit.id)
-                 return
-             }
+    private fun effectiveMaxShapes(creation: CreationSession?, settings: AppSettings): Int =
+        if (creation != null) CREATION_MAX_SHAPES.coerceIn(1, 10_000)
+        else settings.maxShapes.coerceIn(1, 100)
 
-             val newType = chooseType(settings.selectedShapes, settings.shapeSelectionMode)
-             val size = 70f
-             val spawnPoint = if (constrainInsideScreen) {
-                 clampPointInsideScreen(point, size / 2f, size / 2f)
-             } else {
-                 point
-             }
-             val now = currentGameTimeMillis()
-             val hue = Random.nextFloat() * 360f
-             val newShape = GameShape(
-                 id = nextId++,
-                 type = newType,
-                 x = spawnPoint.x,
-                 y = spawnPoint.y,
-                 width = size,
-                 height = size,
-                 vx = 0f,
-                 vy = 0f,
-                 hue = hue,
-                 saturation = calmSaturation(),
-                 value = calmValue(),
-                 lastInteractionMillis = now
-             )
-             activeShapes[pointerId] = newShape.id
-             startPoints[pointerId] = point
-             lastDragDeltas[pointerId] = Offset.Zero
+    fun shapeAt(point: Offset): GameShape? = _shapes.value.lastOrNull { pointInShape(point, it) }
 
-             _shapes.value = (current + newShape).takeLast(settings.maxShapes)
-             Log.d(TAG, "Interaction: Created new shape id=${newShape.id}, type=$newType, pointerId=$pointerId, totalShapes=${_shapes.value.size}")
-         } catch (e: Exception) {
-             Log.e(TAG, "Error in startInteraction", e)
-         }
-     }
+    fun activeShapeIdFor(pointerId: Long): Long? = activeShapes[pointerId]
+
+    fun removeShape(id: Long) {
+        _shapes.value = _shapes.value.filter { it.id != id }
+        val toRemove = activeShapes.filter { it.value == id }.keys
+        toRemove.forEach { activeShapes.remove(it) }
+    }
+
+    fun setShapePinned(id: Long, pinned: Boolean) {
+        _shapes.value = _shapes.value.map { if (it.id == id) it.copy(isPinned = pinned) else it }
+    }
+
+    fun setShapeImmortal(id: Long, immortal: Boolean) {
+        _shapes.value = _shapes.value.map { if (it.id == id) it.copy(isImmortal = immortal) else it }
+    }
+
+    /**
+     * Clears pointer state without applying launch velocity (e.g. before showing shape menu).
+     */
+    fun clearPointer(pointerId: Long) = cleanupPointer(pointerId)
+
+    fun startInteraction(
+        point: Offset,
+        settings: AppSettings,
+        pointerId: Long,
+        constrainInsideScreen: Boolean = false,
+        creation: CreationSession? = null
+    ) {
+        try {
+            recordInteraction()
+            val current = _shapes.value
+            val hit = current.lastOrNull { pointInShape(point, it) }
+            if (hit != null) {
+                Log.d(TAG, "Interaction: Tapped existing shape id=${hit.id}")
+                activeShapes[pointerId] = hit.id
+                startPoints[pointerId] = point
+                lastDragDeltas[pointerId] = Offset.Zero
+                updateInteractionTime(hit.id)
+                return
+            }
+
+            if (creation != null && current.size >= effectiveMaxShapes(creation, settings)) {
+                _creationAtCapacity.tryEmit(Unit)
+                return
+            }
+
+            val newType = when (val t = creation?.spawnType) {
+                null -> chooseType(settings.selectedShapes, settings.shapeSelectionMode)
+                else -> t
+            }
+            val size = 70f
+            val spawnPoint = if (constrainInsideScreen) {
+                clampPointInsideScreen(point, size / 2f, size / 2f)
+            } else {
+                point
+            }
+            val now = currentGameTimeMillis()
+            val (hue, sat, v) = when (val c = creation?.spawnColor) {
+                null -> Triple(Random.nextFloat() * 360f, calmSaturation(), calmValue())
+                else -> Triple(
+                    c.first,
+                    c.second.coerceIn(0f, 1f),
+                    c.third.coerceIn(0f, 1f)
+                )
+            }
+            val (pin, imm) = if (creation != null) {
+                creation.newShapesPinned to creation.newShapesImmortal
+            } else {
+                false to false
+            }
+            val newShape = GameShape(
+                id = nextId++,
+                type = newType,
+                x = spawnPoint.x,
+                y = spawnPoint.y,
+                width = size,
+                height = size,
+                vx = 0f,
+                vy = 0f,
+                hue = hue,
+                saturation = sat,
+                value = v,
+                lastInteractionMillis = now,
+                isPinned = pin,
+                isImmortal = imm
+            )
+            activeShapes[pointerId] = newShape.id
+            startPoints[pointerId] = point
+            lastDragDeltas[pointerId] = Offset.Zero
+
+            val em = effectiveMaxShapes(creation, settings)
+            _shapes.value = (current + newShape).takeLast(em)
+            Log.d(
+                TAG,
+                "Interaction: Created new shape id=${newShape.id}, type=$newType, pointerId=$pointerId, totalShapes=${_shapes.value.size}"
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in startInteraction", e)
+        }
+    }
 
     fun onDrag(
         point: Offset,
@@ -122,7 +222,8 @@ class GameViewModel : ViewModel() {
         settings: AppSettings,
         pointerId: Long,
         resizeOnDrag: Boolean = true,
-        constrainInsideScreen: Boolean = false
+        constrainInsideScreen: Boolean = false,
+        creation: CreationSession? = null
     ) {
         try {
             recordInteraction()
@@ -134,7 +235,7 @@ class GameViewModel : ViewModel() {
             val now = currentGameTimeMillis()
             _shapes.value = _shapes.value.map { shape ->
                 if (shape.id != shapeId) return@map shape
-                val isNewish = shape.vx == 0f && shape.vy == 0f
+                val isNewish = shape.vx == 0f && shape.vy == 0f && !shape.isPinned
                 val targetSize = if (resizeOnDrag && isNewish) computedSize else shape.width
                 val boundedSize = if (constrainInsideScreen) {
                     targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
@@ -154,140 +255,183 @@ class GameViewModel : ViewModel() {
                     lastInteractionMillis = now
                 )
             }
-            trimToMax(settings.maxShapes)
+            trimToMax(effectiveMaxShapes(creation, settings))
         } catch (e: Exception) {
             Log.e(TAG, "Error in onDrag for pointerId=$pointerId", e)
         }
     }
 
-     fun endInteraction(settings: AppSettings, pointerId: Long) {
-         try {
-             recordInteraction()
-             val shapeId = activeShapes[pointerId] ?: return
-             val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
-
-             if (dragDelta == Offset.Zero) {
-                 Log.w(TAG, "No drag delta found for pointerId=$pointerId")
-                 cleanupPointer(pointerId)
-                 return
-             }
-             val rawVx = dragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
-             val rawVy = dragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
-             val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
-             _shapes.value = _shapes.value.map {
-                 if (it.id == shapeId) {
-                     it.copy(
-                         vx = vx,
-                         vy = vy,
-                          lastInteractionMillis = currentGameTimeMillis()
-                     )
-                 } else {
-                     it
-                 }
-             }
-             cleanupPointer(pointerId)
-             Log.d(TAG, "Interaction ended: shapeId=$shapeId, velocity=(${vx}, ${vy})")
-         } catch (e: Exception) {
-             Log.e(TAG, "Error in endInteraction for pointerId=$pointerId", e)
-             cleanupPointer(pointerId)
-         }
-     }
-
-     private fun cleanupPointer(pointerId: Long) {
-         activeShapes.remove(pointerId)
-         lastDragDeltas.remove(pointerId)
-         startPoints.remove(pointerId)
-     }
-
-     fun updatePhysics(deltaSeconds: Float, settings: AppSettings) {
-         try {
-             if (deltaSeconds <= 0f) return
-             if (deltaSeconds > 0.1f) {
-                 Log.w(TAG, "Large deltaSeconds detected: $deltaSeconds, clamping to 0.1f for stability")
-             }
-
-             val safeDelta = deltaSeconds.coerceIn(0.001f, 0.1f)
-             val width = screenSize.x
-             val height = screenSize.y
-
-             // Safety check: ensure valid screen dimensions
-             if (width <= 0f || height <= 0f) {
-                 Log.w(TAG, "Invalid screen dimensions in updatePhysics: ${width}x${height}")
-                 return
-             }
-
-             val timeoutMs = settings.shapeTimeoutSeconds.coerceIn(1, 120) * 1000L
-              val now = advanceGameClock(safeDelta)
-
-             checkAutoSpawn(now, settings)
-
-             val activeIds = activeShapes.values.toSet()
-             val moved = _shapes.value.mapNotNull { shape ->
-                 if (now - shape.lastInteractionMillis > timeoutMs) {
-                     Log.d(TAG, "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s)")
-                     return@mapNotNull null
-                 }
-
-                 val isHeld = activeIds.contains(shape.id)
-                 var x = shape.x
-                 var y = shape.y
-                 var vx = shape.vx
-                 var vy = shape.vy
-
-                 if (!isHeld) {
-                     x = shape.x + shape.vx * safeDelta
-                     y = shape.y + shape.vy * safeDelta
-
-                     val halfW = shape.width / 2f
-                     val halfH = shape.height / 2f
-
-                     if (x - halfW < 0f) {
-                         x = halfW
-                         vx = abs(vx)
-                     } else if (x + halfW > width) {
-                         x = width - halfW
-                         vx = -abs(vx)
-                     }
-                     if (y - halfH < 0f) {
-                         y = halfH
-                         vy = abs(vy)
-                     } else if (y + halfH > height) {
-                         y = height - halfH
-                         vy = -abs(vy)
-                     }
-                 }
-
-                 // Continuous hue cycling while held OR creating
-                 val hue = if (isHeld) {
-                     ShapeColorAnimator.stepHue(shape.hue, safeDelta)
-                 } else {
-                     shape.hue
-                 }
-
-                 val (cvx, cvy) = ShapeVelocity.clamp(vx, vy, settings.maxVelocityPxPerSec.coerceIn(100, 3000).toFloat())
-                 shape.copy(
-                     x = x,
-                     y = y,
-                     vx = cvx,
-                     vy = cvy,
-                     hue = hue
-                 )
-             }.toMutableList()
-
-             resolvePairCollisions(moved, settings)
-             _shapes.value = moved.takeLast(settings.maxShapes.coerceIn(1, 100))
-         } catch (e: Exception) {
-             Log.e(TAG, "Error in updatePhysics", e)
-         }
-     }
-
-    private fun checkAutoSpawn(now: Long, settings: AppSettings) {
+    fun endInteraction(settings: AppSettings, pointerId: Long, creation: CreationSession? = null) {
         try {
+            recordInteraction()
+            val shapeId = activeShapes[pointerId] ?: return
+            val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
+            val wasPinned = _shapes.value.find { it.id == shapeId }?.isPinned == true
+            if (wasPinned) {
+                _shapes.value = _shapes.value.map {
+                    if (it.id == shapeId) {
+                        it.copy(
+                            vx = 0f,
+                            vy = 0f,
+                            lastInteractionMillis = currentGameTimeMillis()
+                        )
+                    } else {
+                        it
+                    }
+                }
+                cleanupPointer(pointerId)
+                return
+            }
+            if (dragDelta == Offset.Zero) {
+                Log.w(TAG, "No drag delta found for pointerId=$pointerId")
+                cleanupPointer(pointerId)
+                return
+            }
+            val rawVx = dragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
+            val rawVy = dragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
+            val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
+            _shapes.value = _shapes.value.map {
+                if (it.id == shapeId) {
+                    it.copy(
+                        vx = vx,
+                        vy = vy,
+                        lastInteractionMillis = currentGameTimeMillis()
+                    )
+                } else {
+                    it
+                }
+            }
+            cleanupPointer(pointerId)
+            Log.d(TAG, "Interaction ended: shapeId=$shapeId, velocity=(${vx},${vy})")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in endInteraction for pointerId=$pointerId", e)
+            cleanupPointer(pointerId)
+        }
+    }
+
+    private fun cleanupPointer(pointerId: Long) {
+        activeShapes.remove(pointerId)
+        lastDragDeltas.remove(pointerId)
+        startPoints.remove(pointerId)
+    }
+
+    fun updatePhysics(deltaSeconds: Float, settings: AppSettings, creation: CreationSession? = null) {
+        try {
+            if (deltaSeconds <= 0f) return
+            if (deltaSeconds > 0.1f) {
+                Log.w(TAG, "Large deltaSeconds detected: $deltaSeconds, clamping to 0.1f for stability")
+            }
+
+            val safeDelta = deltaSeconds.coerceIn(0.001f, 0.1f)
+            val width = screenSize.x
+            val height = screenSize.y
+
+            if (width <= 0f || height <= 0f) {
+                Log.w(TAG, "Invalid screen dimensions in updatePhysics: ${width}x${height}")
+                return
+            }
+
+            val c = creation
+            if (c != null && c.physicsPaused) {
+                val activeIds = activeShapes.values.toSet()
+                _shapes.value = _shapes.value.map { shape ->
+                    if (!activeIds.contains(shape.id)) return@map shape
+                    val hue = if (c.disableHueWhileDragging) {
+                        shape.hue
+                    } else {
+                        ShapeColorAnimator.stepHue(shape.hue, safeDelta)
+                    }
+                    shape.copy(hue = hue)
+                }
+                return
+            }
+
+            val timeoutMs = settings.shapeTimeoutSeconds.coerceIn(1, 120) * 1000L
+            val now = advanceGameClock(safeDelta)
+            val em = effectiveMaxShapes(creation, settings)
+
+            checkAutoSpawn(now, settings, c)
+
+            val activeIds = activeShapes.values.toSet()
+            val moved = _shapes.value.mapNotNull { shape ->
+                if (!shape.isImmortal) {
+                    if (now - shape.lastInteractionMillis > timeoutMs) {
+                        Log.d(TAG, "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s)")
+                        return@mapNotNull null
+                    }
+                }
+
+                val isHeld = activeIds.contains(shape.id)
+                var x = shape.x
+                var y = shape.y
+                var vx = shape.vx
+                var vy = shape.vy
+
+                if (!isHeld) {
+                    if (shape.isPinned) {
+                        x = shape.x
+                        y = shape.y
+                        vx = 0f
+                        vy = 0f
+                    } else {
+                        x = shape.x + shape.vx * safeDelta
+                        y = shape.y + shape.vy * safeDelta
+                        val halfW = shape.width / 2f
+                        val halfH = shape.height / 2f
+                        if (x - halfW < 0f) {
+                            x = halfW
+                            vx = abs(vx)
+                        } else if (x + halfW > width) {
+                            x = width - halfW
+                            vx = -abs(vx)
+                        }
+                        if (y - halfH < 0f) {
+                            y = halfH
+                            vy = abs(vy)
+                        } else if (y + halfH > height) {
+                            y = height - halfH
+                            vy = -abs(vy)
+                        }
+                    }
+                } else {
+                    if (shape.isPinned) {
+                        vx = 0f
+                        vy = 0f
+                    }
+                }
+
+                val disableHue = c?.disableHueWhileDragging == true
+                val hue = if (isHeld && !disableHue) {
+                    ShapeColorAnimator.stepHue(shape.hue, safeDelta)
+                } else {
+                    shape.hue
+                }
+
+                val (cvx, cvy) = ShapeVelocity.clamp(vx, vy, settings.maxVelocityPxPerSec.coerceIn(100, 3000).toFloat())
+                shape.copy(
+                    x = x,
+                    y = y,
+                    vx = cvx,
+                    vy = cvy,
+                    hue = hue
+                )
+            }.toMutableList()
+
+            resolvePairCollisions(moved, settings)
+            _shapes.value = moved.takeLast(em)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in updatePhysics", e)
+        }
+    }
+
+    private fun checkAutoSpawn(now: Long, settings: AppSettings, creation: CreationSession?) {
+        try {
+            if (creation?.physicsPaused == true) return
             val inactivityTimeoutMs = settings.autoSpawnInactivitySeconds * 1000L
-            if (inactivityTimeoutMs <= 0) return // Auto spawn disabled
+            if (inactivityTimeoutMs <= 0) return
             if (now - lastUserInteractionGameMillis > inactivityTimeoutMs) {
                 if (now - lastAutoSpawnGameMillis > inactivityTimeoutMs) {
-                    spawnRandomShape(settings)
+                    spawnRandomShape(settings, creation)
                     lastAutoSpawnGameMillis = now
                 }
             } else {
@@ -298,44 +442,55 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun spawnRandomShape(settings: AppSettings) {
+    private fun spawnRandomShape(settings: AppSettings, creation: CreationSession? = null) {
         try {
-            if (_shapes.value.size >= settings.maxShapes) return
+            val em = effectiveMaxShapes(creation, settings)
+            if (_shapes.value.size >= em) return
 
-            val width = screenSize.x
-            val height = screenSize.y
-
-            // Safety check for screen dimensions
-            if (width <= 0f || height <= 0f) {
-                Log.w(TAG, "Cannot spawn shape: invalid screen dimensions ${width}x${height}")
+            val w = screenSize.x
+            val h = screenSize.y
+            if (w <= 0f || h <= 0f) {
+                Log.w(TAG, "Cannot spawn shape: invalid screen dimensions ${w}x${h}")
                 return
             }
 
+            val newType = when (val t = creation?.spawnType) {
+                null -> chooseType(settings.selectedShapes, settings.shapeSelectionMode)
+                else -> t
+            }
             val size = Random.nextFloat() * (150f - 60f) + 60f
             val margin = size / 2f
-
-            val rx = Random.nextFloat() * (width - 2 * margin) + margin
-            val ry = Random.nextFloat() * (height - 2 * margin) + margin
-
+            val rx = Random.nextFloat() * (w - 2 * margin) + margin
+            val ry = Random.nextFloat() * (h - 2 * margin) + margin
             val maxSpeed = settings.maxVelocityPxPerSec.toFloat() * 0.5f
             val rvx = (Random.nextFloat() - 0.5f) * 2f * maxSpeed
             val rvy = (Random.nextFloat() - 0.5f) * 2f * maxSpeed
-
+            val (hue, sat, v) = when (val c = creation?.spawnColor) {
+                null -> Triple(Random.nextFloat() * 360f, calmSaturation(), calmValue())
+                else -> Triple(c.first, c.second.coerceIn(0f, 1f), c.third.coerceIn(0f, 1f))
+            }
+            val (pin, imm) = if (creation != null) {
+                creation.newShapesPinned to creation.newShapesImmortal
+            } else {
+                false to false
+            }
             val newShape = GameShape(
                 id = nextId++,
-                type = chooseType(settings.selectedShapes, settings.shapeSelectionMode),
+                type = newType,
                 x = rx,
                 y = ry,
                 width = size,
                 height = size,
                 vx = rvx,
                 vy = rvy,
-                hue = Random.nextFloat() * 360f,
-                saturation = calmSaturation(),
-                value = calmValue(),
-                lastInteractionMillis = currentGameTimeMillis()
+                hue = hue,
+                saturation = sat,
+                value = v,
+                lastInteractionMillis = currentGameTimeMillis(),
+                isPinned = pin,
+                isImmortal = imm
             )
-            _shapes.value = (_shapes.value + newShape).takeLast(settings.maxShapes)
+            _shapes.value = (_shapes.value + newShape).takeLast(em)
             Log.d(TAG, "Auto-spawned shape: id=${newShape.id}, type=${newShape.type}, totalShapes=${_shapes.value.size}")
         } catch (e: Exception) {
             Log.e(TAG, "Error in spawnRandomShape", e)
@@ -386,6 +541,8 @@ class GameViewModel : ViewModel() {
                     val minDist = ra + rb
                     if (distance >= minDist) continue
 
+                    if (a.isPinned && a.id !in heldIds && b.isPinned && b.id !in heldIds) continue
+
                     val nx = dx / distance
                     val ny = dy / distance
                     val overlap = minDist - distance
@@ -425,26 +582,56 @@ class GameViewModel : ViewModel() {
                             shapes[i] = keepInside(newA)
                             shapes[j] = keepInside(b)
                         }
+                        a.isPinned && a.id !in heldIds -> {
+                            val bX = b.x + nx * overlap
+                            val bY = b.y + ny * overlap
+                            val bVn = b.vx * nx + b.vy * ny
+                            val bTx = b.vx - bVn * nx
+                            val bTy = b.vy - bVn * ny
+                            var newB = b.copy(
+                                x = bX,
+                                y = bY,
+                                vx = bTx - bVn * nx,
+                                vy = bTy - bVn * ny
+                            )
+                            val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
+                            newB = newB.copy(vx = bc.first, vy = bc.second)
+                            shapes[i] = keepInside(a)
+                            shapes[j] = keepInside(newB)
+                        }
+                        b.isPinned && b.id !in heldIds -> {
+                            val aX = a.x - nx * overlap
+                            val aY = a.y - ny * overlap
+                            val aVn = a.vx * nx + a.vy * ny
+                            val aTx = a.vx - aVn * nx
+                            val aTy = a.vy - aVn * ny
+                            var newA = a.copy(
+                                x = aX,
+                                y = aY,
+                                vx = aTx - aVn * nx,
+                                vy = aTy - aVn * ny
+                            )
+                            val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
+                            newA = newA.copy(vx = ac.first, vy = ac.second)
+                            shapes[i] = keepInside(newA)
+                            shapes[j] = keepInside(b)
+                        }
                         else -> {
                             val massA = a.width * a.height
                             val massB = b.width * b.height
                             val totalMass = massA + massB
-
                             val aX = a.x - nx * overlap * 0.5f
                             val aY = a.y - ny * overlap * 0.5f
                             val bX = b.x + nx * overlap * 0.5f
                             val bY = b.y + ny * overlap * 0.5f
-
                             val aVn = a.vx * nx + a.vy * ny
                             val bVn = b.vx * nx + b.vy * ny
                             val aTx = a.vx - aVn * nx
                             val aTy = a.vy - aVn * ny
                             val bTx = b.vx - bVn * nx
                             val bTy = b.vy - bVn * ny
-
                             val aVnNew = ((massA - massB) / totalMass) * aVn + (2f * massB / totalMass) * bVn
                             val bVnNew = (2f * massA / totalMass) * aVn + ((massB - massA) / totalMass) * bVn
-
                             var newA = a.copy(
                                 x = aX,
                                 y = aY,
@@ -507,49 +694,45 @@ class GameViewModel : ViewModel() {
         }
     }
 
-     private fun chooseType(selectedShapes: Set<ShapeType>, selectionMode: ShapeSelectionMode): ShapeType {
-         val shapesList = selectedShapes.toList()
-         if (shapesList.isEmpty()) {
-             Log.w(TAG, "No selected shapes available, defaulting to CIRCLE")
-             return ShapeType.CIRCLE // fallback
-         }
-         return when (selectionMode) {
-             ShapeSelectionMode.ALTERNATE -> {
-                 val index = lastTypeIndex.getAndIncrement() % shapesList.size
-                 if (index < 0) lastTypeIndex.set(0)
-                 shapesList[abs(index) % shapesList.size]
-             }
-             ShapeSelectionMode.RANDOM -> shapesList.random()
-         }
-     }
+    private fun chooseType(selectedShapes: Set<ShapeType>, selectionMode: ShapeSelectionMode): ShapeType {
+        val shapesList = selectedShapes.toList()
+        if (shapesList.isEmpty()) {
+            Log.w(TAG, "No selected shapes available, defaulting to CIRCLE")
+            return ShapeType.CIRCLE
+        }
+        return when (selectionMode) {
+            ShapeSelectionMode.ALTERNATE -> {
+                val index = lastTypeIndex.getAndIncrement() % shapesList.size
+                if (index < 0) lastTypeIndex.set(0)
+                shapesList[abs(index) % shapesList.size]
+            }
+            ShapeSelectionMode.RANDOM -> shapesList.random()
+        }
+    }
 
-     private fun pointInShape(point: Offset, shape: GameShape): Boolean {
-         val dx = point.x - shape.x
-         val dy = point.y - shape.y
-         val halfWidth = shape.width / 2f
-         val halfHeight = shape.height / 2f
-
-         return when (shape.type) {
-             ShapeType.CIRCLE -> {
-                 val radius = halfWidth
-                 hypot(dx, dy) <= radius
-             }
-             ShapeType.RECTANGLE -> {
-                 abs(dx) <= halfWidth && abs(dy) <= halfHeight
-             }
-             ShapeType.TRIANGLE -> {
-                 // Bounding box check for triangle
-                 abs(dx) <= halfWidth && dy <= halfHeight && dy >= -halfHeight / 2f
-             }
-             ShapeType.ARCH -> {
-                 // Arch is an arc - use approximate circular bounds
-                 val radius = halfWidth
-                 hypot(dx, dy) <= radius * 1.1f
-             }
-         }
-     }
+    private fun pointInShape(point: Offset, shape: GameShape): Boolean {
+        val dx = point.x - shape.x
+        val dy = point.y - shape.y
+        val halfWidth = shape.width / 2f
+        val halfHeight = shape.height / 2f
+        return when (shape.type) {
+            ShapeType.CIRCLE -> {
+                val radius = halfWidth
+                hypot(dx, dy) <= radius
+            }
+            ShapeType.RECTANGLE -> {
+                abs(dx) <= halfWidth && abs(dy) <= halfHeight
+            }
+            ShapeType.TRIANGLE -> {
+                abs(dx) <= halfWidth && dy <= halfHeight && dy >= -halfHeight / 2f
+            }
+            ShapeType.ARCH -> {
+                val radius = halfWidth
+                hypot(dx, dy) <= radius * 1.1f
+            }
+        }
+    }
 
     private fun calmSaturation(): Float = (0.55f + Random.nextFloat() * 0.18f).coerceIn(0f, 1f)
-
     private fun calmValue(): Float = (0.78f + Random.nextFloat() * 0.14f).coerceIn(0f, 1f)
 }
