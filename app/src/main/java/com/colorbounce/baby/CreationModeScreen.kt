@@ -6,12 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -21,8 +21,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +46,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -46,11 +55,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import androidx.compose.ui.zIndex
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.isActive
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -329,36 +337,105 @@ fun CreationModeScreen(
             if (shape == null) {
                 contextMenuShapeId = null
             } else {
-                Dialog(onDismissRequest = { contextMenuShapeId = null }) {
-                    Surface(shape = MaterialTheme.shapes.large) {
-                        Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(
-                                "Shape actions",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text("Pinned: ${shape.isPinned}  ·  Immortal: ${shape.isImmortal}")
-                            TextButton(
-                                onClick = {
-                                    viewModel.removeShape(id)
-                                    contextMenuShapeId = null
+                val scheme = MaterialTheme.colorScheme
+                val dimAction = IconButtonDefaults.iconButtonColors(
+                    containerColor = Color.Transparent,
+                    contentColor = scheme.outline
+                )
+                val pinColors = IconButtonDefaults.iconButtonColors(
+                    containerColor = if (shape.isPinned) scheme.primaryContainer else Color.Transparent,
+                    contentColor = if (shape.isPinned) scheme.onPrimaryContainer else scheme.outline
+                )
+                val immortalColors = IconButtonDefaults.iconButtonColors(
+                    containerColor = if (shape.isImmortal) scheme.tertiaryContainer else Color.Transparent,
+                    contentColor = if (shape.isImmortal) scheme.onTertiaryContainer else scheme.outline
+                )
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(5f)
+                ) {
+                    val density = LocalDensity.current
+                    var menuSize by remember(id) { mutableStateOf(IntSize.Zero) }
+                    val marginPx = with(density) { 8.dp.toPx() }
+                    val gapPx = with(density) { 10.dp.toPx() }
+                    val estMenuW = with(density) { 168.dp.toPx() }
+                    val estMenuH = with(density) { 56.dp.toPx() }
+                    val screenW = with(density) { maxWidth.toPx() }
+                    val screenH = with(density) { maxHeight.toPx() }
+
+                    val scrimInteraction = remember { MutableInteractionSource() }
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .align(Alignment.TopStart)
+                            .clickable(
+                                indication = null,
+                                interactionSource = scrimInteraction
+                            ) { contextMenuShapeId = null }
+                    )
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .offset {
+                                val menuW =
+                                    if (menuSize.width > 0) menuSize.width.toFloat() else estMenuW
+                                val menuH =
+                                    if (menuSize.height > 0) menuSize.height.toFloat() else estMenuH
+                                var x = shape.x - menuW / 2f
+                                var y = shape.y + shape.height / 2f + gapPx
+                                if (y + menuH > screenH - marginPx) {
+                                    y = shape.y - shape.height / 2f - gapPx - menuH
                                 }
-                            ) { Text("Delete") }
-                            TextButton(
-                                onClick = {
-                                    viewModel.setShapePinned(id, !shape.isPinned)
-                                    contextMenuShapeId = null
-                                }
-                            ) {
-                                Text(if (shape.isPinned) "Unpin" else "Pin (constant)")
+                                x = x.coerceIn(marginPx, screenW - menuW - marginPx)
+                                y = y.coerceIn(marginPx, screenH - menuH - marginPx)
+                                IntOffset(x.roundToInt(), y.roundToInt())
                             }
-                            TextButton(
-                                onClick = {
-                                    viewModel.setShapeImmortal(id, !shape.isImmortal)
-                                    contextMenuShapeId = null
-                                }
+                            .onSizeChanged { menuSize = it }
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = scheme.surfaceContainerHigh,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 4.dp
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(if (shape.isImmortal) "Mortal" else "Immortal")
+                                IconButton(
+                                    onClick = {
+                                        viewModel.removeShape(id)
+                                        contextMenuShapeId = null
+                                    },
+                                    colors = dimAction
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Delete,
+                                        contentDescription = "Delete shape",
+                                        tint = Color.Unspecified
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.setShapePinned(id, !shape.isPinned) },
+                                    colors = pinColors
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.PushPin,
+                                        contentDescription = "Pin shape",
+                                        tint = Color.Unspecified
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { viewModel.setShapeImmortal(id, !shape.isImmortal) },
+                                    colors = immortalColors
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Shield,
+                                        contentDescription = "Immortal shape",
+                                        tint = Color.Unspecified
+                                    )
+                                }
                             }
                         }
                     }
