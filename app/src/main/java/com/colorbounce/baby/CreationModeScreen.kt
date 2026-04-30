@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -25,8 +24,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,8 +46,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -65,6 +71,17 @@ import androidx.compose.runtime.saveable.rememberSaveable
 
 private const val TAG = "CreationMode"
 private const val EXIT_BUTTON_TAG = "exit_button"
+
+/** Spectrum for the open (unlocked) hue-lock icon — reads as “color” in any theme. */
+private val rainbowLockOpenGradientColors = listOf(
+    Color(0xFFFF1744),
+    Color(0xFFFF9100),
+    Color(0xFFFFEA00),
+    Color(0xFF00E676),
+    Color(0xFF00B0FF),
+    Color(0xFFD500F9),
+    Color(0xFFFF1744)
+)
 
 private enum class RulerScreenEdge { Top, Bottom, Start, End }
 
@@ -338,18 +355,9 @@ fun CreationModeScreen(
                 contextMenuShapeId = null
             } else {
                 val scheme = MaterialTheme.colorScheme
-                val dimAction = IconButtonDefaults.iconButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = scheme.outline
-                )
-                val pinColors = IconButtonDefaults.iconButtonColors(
-                    containerColor = if (shape.isPinned) scheme.primaryContainer else Color.Transparent,
-                    contentColor = if (shape.isPinned) scheme.onPrimaryContainer else scheme.outline
-                )
-                val immortalColors = IconButtonDefaults.iconButtonColors(
-                    containerColor = if (shape.isImmortal) scheme.tertiaryContainer else Color.Transparent,
-                    contentColor = if (shape.isImmortal) scheme.onTertiaryContainer else scheme.outline
-                )
+                val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
+                val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
+                val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
                 BoxWithConstraints(
                     Modifier
                         .fillMaxSize()
@@ -359,7 +367,7 @@ fun CreationModeScreen(
                     var menuSize by remember(id) { mutableStateOf(IntSize.Zero) }
                     val marginPx = with(density) { 8.dp.toPx() }
                     val gapPx = with(density) { 10.dp.toPx() }
-                    val estMenuW = with(density) { 168.dp.toPx() }
+                    val estMenuW = with(density) { 220.dp.toPx() }
                     val estMenuH = with(density) { 56.dp.toPx() }
                     val screenW = with(density) { maxWidth.toPx() }
                     val screenH = with(density) { maxHeight.toPx() }
@@ -403,39 +411,37 @@ fun CreationModeScreen(
                                 Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                IconButton(
+                                ShapeContextMenuIconButton(
                                     onClick = {
                                         viewModel.removeShape(id)
                                         contextMenuShapeId = null
                                     },
-                                    colors = dimAction
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Delete,
-                                        contentDescription = "Delete shape",
-                                        tint = Color.Unspecified
-                                    )
-                                }
-                                IconButton(
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Delete shape",
+                                    tint = menuIconInk
+                                )
+                                ShapeContextMenuIconButton(
                                     onClick = { viewModel.setShapePinned(id, !shape.isPinned) },
-                                    colors = pinColors
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.PushPin,
-                                        contentDescription = "Pin shape",
-                                        tint = Color.Unspecified
-                                    )
-                                }
-                                IconButton(
+                                    imageVector = Icons.Filled.PushPin,
+                                    contentDescription = "Pin shape",
+                                    tint = if (shape.isPinned) menuIconInk else menuIconInkDim
+                                )
+                                ShapeContextMenuIconButton(
                                     onClick = { viewModel.setShapeImmortal(id, !shape.isImmortal) },
-                                    colors = immortalColors
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Shield,
-                                        contentDescription = "Immortal shape",
-                                        tint = Color.Unspecified
-                                    )
-                                }
+                                    imageVector = Icons.Filled.Shield,
+                                    contentDescription = "Immortal shape",
+                                    tint = if (shape.isImmortal) menuIconInk else menuIconInkDim
+                                )
+                                ShapeContextMenuHueLockButton(
+                                    shape = shape,
+                                    frozen = shape.freezeHueWhileDragging,
+                                    onClick = {
+                                        viewModel.setShapeFreezeHueWhileDragging(
+                                            id,
+                                            !shape.freezeHueWhileDragging
+                                        )
+                                    }
+                                )
                             }
                         }
                     }
@@ -450,6 +456,72 @@ fun CreationModeScreen(
                 text = { Text("Maximum of $CREATION_MAX_SHAPES shapes. Remove a shape to add more.") },
                 confirmButton = {
                     TextButton(onClick = { showAtCapacity = false }) { Text("OK") }
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ShapeContextMenuIconButton(
+    onClick: () -> Unit,
+    imageVector: ImageVector,
+    contentDescription: String,
+    tint: Color
+) {
+    IconButton(
+        onClick = onClick,
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = tint
+        )
+    ) {
+        Icon(
+            imageVector = imageVector,
+            contentDescription = contentDescription,
+            tint = tint
+        )
+    }
+}
+
+@Composable
+private fun ShapeContextMenuHueLockButton(
+    shape: GameShape,
+    frozen: Boolean,
+    onClick: () -> Unit
+) {
+    val shapeBodyColor = shape.color
+    IconButton(
+        onClick = onClick,
+        colors = IconButtonDefaults.iconButtonColors(
+            containerColor = Color.Transparent,
+            contentColor = if (frozen) shapeBodyColor else Color.White
+        )
+    ) {
+        if (frozen) {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription = "Hue frozen while dragging this shape. Tap to allow hue to shift.",
+                tint = shapeBodyColor
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.LockOpen,
+                contentDescription = "Tap to freeze hue while dragging this shape.",
+                tint = Color.White,
+                modifier = Modifier.drawWithCache {
+                    val brush = Brush.linearGradient(
+                        colors = rainbowLockOpenGradientColors,
+                        start = Offset.Zero,
+                        end = Offset(size.width, size.height)
+                    )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(
+                            brush = brush,
+                            blendMode = BlendMode.SrcIn
+                        )
+                    }
                 }
             )
         }

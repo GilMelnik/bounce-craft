@@ -21,11 +21,15 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.IconButton
@@ -103,7 +107,7 @@ fun CreationModeRuler(
                 selected = session.spawnType == null,
                 onClick = { onSessionChange(session.copy(spawnType = null)) }
             ) {
-                RulerShapeTypeGlyph(ShapeType.CIRCLE, isDefault = true, tint = scheme.primary)
+                RulerShapeTypeGlyph(ShapeType.CIRCLE, isDefault = true, tint = it)
             }
             for (t in listOf(
                 ShapeType.CIRCLE,
@@ -116,7 +120,7 @@ fun CreationModeRuler(
                     selected = session.spawnType == t,
                     onClick = { onSessionChange(session.copy(spawnType = t)) }
                 ) {
-                    RulerShapeTypeGlyph(t, isDefault = false, tint = scheme.primary)
+                    RulerShapeTypeGlyph(t, isDefault = false, tint = it)
                 }
             }
         }
@@ -132,7 +136,11 @@ fun CreationModeRuler(
                 selected = session.spawnColor == null,
                 onClick = { onSessionChange(session.copy(spawnColor = null)) }
             ) {
-                Text("A", style = MaterialTheme.typography.labelLarge, color = scheme.onSurface)
+                Text(
+                    "A",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (session.spawnColor == null) scheme.onPrimary else scheme.onSurface
+                )
             }
             for (preset in CreationColorPresets) {
                 val c = session.spawnColor
@@ -168,10 +176,11 @@ fun CreationModeRuler(
                 onSessionChange(session.copy(physicsPaused = !session.physicsPaused))
             }
         )
-        RulerSwitchRow(
-            label = "No hue (drag)",
-            checked = session.disableHueWhileDragging,
-            onChecked = { onSessionChange(session.copy(disableHueWhileDragging = it)) }
+        RulerHueLockRow(
+            locked = session.disableHueWhileDragging,
+            onToggle = {
+                onSessionChange(session.copy(disableHueWhileDragging = !session.disableHueWhileDragging))
+            }
         )
         RulerSwitchRow(
             label = "Pin new",
@@ -192,25 +201,40 @@ private fun ShapeTypeChoiceChip(
     label: String?,
     selected: Boolean,
     onClick: () -> Unit,
-    icon: @Composable () -> Unit
+    icon: @Composable (iconTint: Color) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val iconTint = if (selected) scheme.onPrimary else scheme.primary
     FilterChip(
         selected = selected,
         onClick = onClick,
         label = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { icon() }
+                Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { icon(iconTint) }
                 if (label != null) {
                     Spacer(Modifier.width(4.dp))
-                    Text(label, style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (selected) scheme.onPrimary else scheme.onSurface
+                    )
                 }
             }
         },
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = scheme.outline,
+            selectedBorderColor = scheme.primary,
+            selectedBorderWidth = 2.dp
+        ),
         colors = FilterChipDefaults.filterChipColors(
-            selectedLabelColor = scheme.onSecondaryContainer,
+            containerColor = scheme.surfaceContainerHighest,
             labelColor = scheme.onSurface,
-            selectedContainerColor = scheme.secondaryContainer
+            iconColor = scheme.onSurfaceVariant,
+            selectedContainerColor = scheme.primary,
+            selectedLabelColor = scheme.onPrimary,
+            selectedLeadingIconColor = scheme.onPrimary
         )
     )
 }
@@ -226,9 +250,18 @@ private fun ColorSwatch(
         selected = selected,
         onClick = onClick,
         label = { content() },
+        border = FilterChipDefaults.filterChipBorder(
+            enabled = true,
+            selected = selected,
+            borderColor = scheme.outline,
+            selectedBorderColor = scheme.primary,
+            selectedBorderWidth = 2.dp
+        ),
         colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = scheme.secondaryContainer,
-            labelColor = scheme.onSurface
+            containerColor = scheme.surfaceContainerHighest,
+            labelColor = scheme.onSurface,
+            selectedContainerColor = scheme.primary,
+            selectedLabelColor = scheme.onPrimary
         )
     )
 }
@@ -375,6 +408,51 @@ private fun RulerPlayPauseControl(
                         .semantics { contentDescription = "Pause physics" }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun RulerHueLockRow(
+    locked: Boolean,
+    onToggle: () -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = if (locked) {
+                "Hue stays fixed while moving"
+            } else {
+                "Hue shifts while you drag"
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onSurface,
+            modifier = Modifier
+                .weight(1f)
+                .padding(end = 8.dp)
+        )
+        FilledTonalIconButton(
+            onClick = onToggle,
+            modifier = Modifier.size(48.dp),
+            colors = IconButtonDefaults.filledTonalIconButtonColors(
+                containerColor = if (locked) scheme.primaryContainer else scheme.surfaceContainerHighest,
+                contentColor = if (locked) scheme.onPrimaryContainer else scheme.onSurfaceVariant
+            )
+        ) {
+            Icon(
+                imageVector = if (locked) Icons.Filled.Lock else Icons.Outlined.LockOpen,
+                contentDescription = if (locked) {
+                    "Hue frozen while moving. Tap to allow shifting colors when dragging."
+                } else {
+                    "Tap to freeze hue while moving shapes."
+                }
+            )
         }
     }
 }

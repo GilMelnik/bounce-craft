@@ -131,6 +131,12 @@ class GameViewModel : ViewModel() {
         _shapes.value = _shapes.value.map { if (it.id == id) it.copy(isImmortal = immortal) else it }
     }
 
+    fun setShapeFreezeHueWhileDragging(id: Long, freeze: Boolean) {
+        _shapes.value = _shapes.value.map {
+            if (it.id == id) it.copy(freezeHueWhileDragging = freeze) else it
+        }
+    }
+
     /**
      * Clears pointer state without applying launch velocity (e.g. before showing shape menu).
      */
@@ -336,7 +342,8 @@ class GameViewModel : ViewModel() {
                 val activeIds = activeShapes.values.toSet()
                 _shapes.value = _shapes.value.map { shape ->
                     if (!activeIds.contains(shape.id)) return@map shape
-                    val hue = if (c.disableHueWhileDragging) {
+                    val freezeHue = c.disableHueWhileDragging || shape.freezeHueWhileDragging
+                    val hue = if (freezeHue) {
                         shape.hue
                     } else {
                         ShapeColorAnimator.stepHue(shape.hue, safeDelta)
@@ -400,7 +407,8 @@ class GameViewModel : ViewModel() {
                     }
                 }
 
-                val disableHue = c?.disableHueWhileDragging == true
+                val disableHue =
+                    c?.disableHueWhileDragging == true || (isHeld && shape.freezeHueWhileDragging)
                 val hue = if (isHeld && !disableHue) {
                     ShapeColorAnimator.stepHue(shape.hue, safeDelta)
                 } else {

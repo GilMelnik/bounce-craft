@@ -23,7 +23,9 @@ data class GameShape(
     /** If true, shape is static in physics and only moves when the user drags it. */
     val isPinned: Boolean = false,
     /** If true, shape is not removed by shape timeout rules. */
-    val isImmortal: Boolean = false
+    val isImmortal: Boolean = false,
+    /** If true, this shape's hue does not animate while the user is dragging it. */
+    val freezeHueWhileDragging: Boolean = false
 )
 
 val GameShape.color: Color
