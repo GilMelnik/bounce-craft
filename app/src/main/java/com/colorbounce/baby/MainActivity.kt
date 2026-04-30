@@ -34,7 +34,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,7 +43,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -58,6 +56,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -257,6 +256,10 @@ private fun ColorBounceApp(
                     Log.d(TAG, "Navigating to settings screen")
                     navController.navigate("settings")
                 },
+                onAbout = {
+                    Log.d(TAG, "Navigating to about screen")
+                    navController.navigate("about")
+                },
                 onTutorial = {
                     Log.d(TAG, "Tutorial replay requested")
                     tutorialExitTarget = "menu"
@@ -270,6 +273,14 @@ private fun ColorBounceApp(
                 repository = settingsRepository,
                 onBack = {
                     Log.d(TAG, "Navigating back from settings")
+                    navController.popBackStack()
+                }
+            )
+        }
+        composable("about") {
+            AboutScreen(
+                onBack = {
+                    Log.d(TAG, "Navigating back from about")
                     navController.popBackStack()
                 }
             )
@@ -317,20 +328,10 @@ private fun MainMenuScreen(
     onPlay: () -> Unit,
     onCreation: () -> Unit,
     onSettings: () -> Unit,
+    onAbout: () -> Unit,
     onTutorial: () -> Unit
 ) {
     val context = LocalContext.current
-    var showAbout by remember { mutableStateOf(false) }
-    val appVersion = remember {
-        try {
-            @Suppress("DEPRECATION")
-            context.packageManager
-                .getPackageInfo(context.packageName, 0)
-                .versionName
-        } catch (e: Exception) {
-            "—"
-        }
-    }
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
 
     // Surface sets LocalContentColor to onBackground for default text (light + dark).
@@ -415,27 +416,15 @@ private fun MainMenuScreen(
                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 ) { Text("Settings") }
-                TextButton(
-                    onClick = { showAbout = true },
-                    modifier = Modifier.padding(top = 8.dp)
-                ) {
-                    Text("About", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
-                }
-                if (showAbout) {
-                    AlertDialog(
-                        onDismissRequest = { showAbout = false },
-                        title = { Text("About Bounce Craft") },
-                        text = {
-                            Text(
-                                "A playful physics canvas for creating and bouncing shapes.\n\n" +
-                                    "Version $appVersion"
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(onClick = { showAbout = false }) { Text("OK") }
-                        }
+                OutlinedButton(
+                    modifier = Modifier
+                        .width(220.dp)
+                        .padding(top = 12.dp),
+                    onClick = onAbout,
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
                     )
-                }
+                ) { Text("About") }
                 Spacer(Modifier.weight(0.5f))
                 Text(
                     text = "Enjoying the app? Buy me a coffee ☕",
@@ -452,6 +441,134 @@ private fun MainMenuScreen(
                         }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun AboutScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val scheme = MaterialTheme.colorScheme
+    val scroll = rememberScrollState()
+    val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
+    val appVersion = remember {
+        try {
+            @Suppress("DEPRECATION")
+            context.packageManager
+                .getPackageInfo(context.packageName, 0)
+                .versionName
+        } catch (e: Exception) {
+            "—"
+        }
+    }
+    fun openUrl(url: String) {
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, url.toUri()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        )
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = scheme.background,
+        contentColor = scheme.onBackground
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scroll)
+                .padding(
+                    top = systemBarsPadding.calculateTopPadding(),
+                    bottom = systemBarsPadding.calculateBottomPadding(),
+                    start = 16.dp,
+                    end = 16.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onBack) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "About",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = scheme.onBackground
+                )
+            }
+
+            val bodyStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onBackground)
+            Text(
+                "I built this app after becoming a new father. When my daughter was around one year old, " +
+                    "she always wanted to play with my phone or my partner's whenever she saw them.",
+                style = bodyStyle
+            )
+            Text(
+                "I don't think smartphones are ideal for babies this young, but if a baby is going to play with a phone, " +
+                    "I wanted it to be in a way that doesn't lead to accidental calls, deleted notifications, " +
+                    "or random messages typed in gibberish.",
+                style = bodyStyle
+            )
+            Text(
+                "That's why I made this app: a simple, safe, distraction-free place for little hands to explore shapes and colors.",
+                style = bodyStyle
+            )
+            Text(
+                "This is a hobby project—I'm not a professional app developer.",
+                style = bodyStyle
+            )
+            Text(
+                "The app is open source, and the code is available on GitHub.",
+                style = bodyStyle
+            )
+            Text(
+                "If you enjoy the app, please consider buying me a coffee to help cover the costs of maintaining it.",
+                style = bodyStyle
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(
+                    onClick = { openUrl("https://buymeacoffee.com/gilmelnik") },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_coffee),
+                        contentDescription = "Buy me a coffee",
+                        modifier = Modifier.size(22.dp),
+                        tint = scheme.primary
+                    )
+                }
+                IconButton(
+                    onClick = { openUrl("https://github.com/GilMelnik/bounce-craft") },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_github),
+                        contentDescription = "Open GitHub repository",
+                        modifier = Modifier.size(22.dp),
+                        tint = scheme.primary
+                    )
+                }
+            }
+            Text(
+                "Thank you.",
+                style = bodyStyle,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                "Version $appVersion",
+                style = MaterialTheme.typography.bodyMedium,
+                color = scheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp, bottom = 24.dp)
+            )
         }
     }
 }
