@@ -6,7 +6,6 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -48,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -117,6 +117,7 @@ fun CreationModeScreen(
         session.copy(physicsPaused = session.physicsPaused || (contextMenuShapeId != null))
     }
     val sessionRef by rememberUpdatedState(effectiveSession)
+    val dismissShapeMenu by rememberUpdatedState(newValue = { contextMenuShapeId = null })
 
     LaunchedEffect(Unit) {
         viewModel.enterCreationMode()
@@ -372,15 +373,95 @@ fun CreationModeScreen(
                     val screenW = with(density) { maxWidth.toPx() }
                     val screenH = with(density) { maxHeight.toPx() }
 
-                    val scrimInteraction = remember { MutableInteractionSource() }
                     Box(
                         Modifier
                             .fillMaxSize()
                             .align(Alignment.TopStart)
-                            .clickable(
-                                indication = null,
-                                interactionSource = scrimInteraction
-                            ) { contextMenuShapeId = null }
+                            .pointerInput(id, menuSize, settings.maxShapes) {
+                                awaitPointerEventScope {
+                                    val downPos = mutableMapOf<Long, Offset>()
+                                    /** True = dragging the selected shape; false = tap-outside-to-dismiss. */
+                                    val draggingSelectedShape = mutableMapOf<Long, Boolean>()
+                                    while (true) {
+                                        try {
+                                            val event = awaitPointerEvent()
+                                            for (change in event.changes) {
+                                                val pid = change.id.value
+                                                when {
+                                                    change.pressed && !change.previousPressed -> {
+                                                        val p = change.position
+                                                        val menuRect = contextMenuScreenBounds(
+                                                            shape,
+                                                            menuSize,
+                                                            estMenuW,
+                                                            estMenuH,
+                                                            marginPx,
+                                                            gapPx,
+                                                            screenW,
+                                                            screenH
+                                                        )
+                                                        if (menuRect.contains(p)) continue
+                                                        val hit = viewModel.shapeAt(p)
+                                                        if (hit?.id == id) {
+                                                            viewModel.startInteraction(
+                                                                p,
+                                                                settings,
+                                                                pid,
+                                                                creation = sessionRef
+                                                            )
+                                                            downPos[pid] = p
+                                                            draggingSelectedShape[pid] = true
+                                                        } else {
+                                                            downPos[pid] = p
+                                                            draggingSelectedShape[pid] = false
+                                                        }
+                                                    }
+
+                                                    change.pressed && change.previousPressed -> {
+                                                        if (draggingSelectedShape[pid] == true) {
+                                                            val drag =
+                                                                change.position - change.previousPosition
+                                                            viewModel.onDrag(
+                                                                change.position,
+                                                                drag,
+                                                                settings,
+                                                                pid,
+                                                                resizeOnDrag = false,
+                                                                constrainInsideScreen = true,
+                                                                creation = sessionRef
+                                                            )
+                                                        }
+                                                    }
+
+                                                    !change.pressed && change.previousPressed -> {
+                                                        val wasDraggingSelected =
+                                                            draggingSelectedShape.remove(pid)
+                                                        val start = downPos.remove(pid)
+                                                        when {
+                                                            wasDraggingSelected == true -> {
+                                                                viewModel.endInteraction(
+                                                                    settings,
+                                                                    pid,
+                                                                    sessionRef,
+                                                                    applyLaunchVelocity = false
+                                                                )
+                                                            }
+
+                                                            wasDraggingSelected == false && start != null -> {
+                                                                val moved =
+                                                                    (change.position - start).getDistance() >
+                                                                        slopPx
+                                                                if (!moved) dismissShapeMenu()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        } catch (_: Exception) {
+                                        }
+                                    }
+                                }
+                            }
                     )
                     Box(
                         Modifier
@@ -632,6 +713,29 @@ private fun CreationRulerMinimizedControl(
             }
         }
     }
+}
+
+/** Menu bar bounds in playfield coordinates (matches [CreationModeScreen] menu placement). */
+private fun contextMenuScreenBounds(
+    shape: GameShape,
+    menuSize: IntSize,
+    estMenuW: Float,
+    estMenuH: Float,
+    marginPx: Float,
+    gapPx: Float,
+    screenW: Float,
+    screenH: Float
+): Rect {
+    val menuW = if (menuSize.width > 0) menuSize.width.toFloat() else estMenuW
+    val menuH = if (menuSize.height > 0) menuSize.height.toFloat() else estMenuH
+    var x = shape.x - menuW / 2f
+    var y = shape.y + shape.height / 2f + gapPx
+    if (y + menuH > screenH - marginPx) {
+        y = shape.y - shape.height / 2f - gapPx - menuH
+    }
+    x = x.coerceIn(marginPx, screenW - menuW - marginPx)
+    y = y.coerceIn(marginPx, screenH - menuH - marginPx)
+    return Rect(x, y, x + menuW, y + menuH)
 }
 
 /** Pairs a quick down after a short tap on the same shape to open the shape menu (double-tap). */

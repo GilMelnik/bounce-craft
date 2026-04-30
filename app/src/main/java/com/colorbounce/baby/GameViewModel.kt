@@ -267,13 +267,33 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    fun endInteraction(settings: AppSettings, pointerId: Long, creation: CreationSession? = null) {
+    fun endInteraction(
+        settings: AppSettings,
+        pointerId: Long,
+        creation: CreationSession? = null,
+        applyLaunchVelocity: Boolean = true
+    ) {
         try {
             recordInteraction()
             val shapeId = activeShapes[pointerId] ?: return
             val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
             val wasPinned = _shapes.value.find { it.id == shapeId }?.isPinned == true
             if (wasPinned) {
+                _shapes.value = _shapes.value.map {
+                    if (it.id == shapeId) {
+                        it.copy(
+                            vx = 0f,
+                            vy = 0f,
+                            lastInteractionMillis = currentGameTimeMillis()
+                        )
+                    } else {
+                        it
+                    }
+                }
+                cleanupPointer(pointerId)
+                return
+            }
+            if (!applyLaunchVelocity) {
                 _shapes.value = _shapes.value.map {
                     if (it.id == shapeId) {
                         it.copy(
