@@ -11,18 +11,17 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.AssistChip
-import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
@@ -43,9 +42,9 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
 
@@ -53,47 +52,22 @@ import kotlin.math.min
 fun CreationModeRuler(
     session: CreationSession,
     onSessionChange: (CreationSession) -> Unit,
-    expanded: Boolean,
-    onToggleExpanded: () -> Unit,
+    onCollapse: () -> Unit,
+    isSideBar: Boolean,
     maxHeight: Dp
 ) {
     val scheme = MaterialTheme.colorScheme
-    if (!expanded) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.End
-        ) {
-            AssistChip(
-                onClick = onToggleExpanded,
-                label = {
-                    Text(
-                        "Ruler & tools",
-                        style = MaterialTheme.typography.labelLarge
-                    )
-                },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Filled.KeyboardArrowUp,
-                        contentDescription = "Expand ruler"
-                    )
-                },
-                colors = AssistChipDefaults.assistChipColors(
-                    labelColor = scheme.onSurface,
-                    leadingIconContentColor = scheme.onSurface
-                )
-            )
-        }
-        return
-    }
-
-    Column(
-        modifier = Modifier
+    val columnModifier = if (isSideBar) {
+        Modifier
+            .widthIn(260.dp, 300.dp)
+            .heightIn(max = maxHeight)
+    } else {
+        Modifier
             .fillMaxWidth()
-            .height(maxHeight)
+            .heightIn(max = maxHeight)
+    }
+    Column(
+        modifier = columnModifier
             .padding(12.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -102,16 +76,12 @@ fun CreationModeRuler(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                "Creation tools",
-                style = MaterialTheme.typography.titleMedium,
-                color = scheme.onSurface,
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+            RulerLineIcon(
+                color = scheme.primary,
+                size = DpSize(32.dp, 20.dp)
             )
             IconButton(
-                onClick = onToggleExpanded,
+                onClick = onCollapse,
                 modifier = Modifier.size(40.dp)
             ) {
                 Icon(
@@ -120,13 +90,7 @@ fun CreationModeRuler(
                 )
             }
         }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "Spawning — shape type (new shapes)",
-            style = MaterialTheme.typography.labelLarge,
-            color = scheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -135,7 +99,7 @@ fun CreationModeRuler(
             verticalAlignment = Alignment.CenterVertically
         ) {
             ShapeTypeChoiceChip(
-                label = "Default",
+                label = null,
                 selected = session.spawnType == null,
                 onClick = { onSessionChange(session.copy(spawnType = null)) }
             ) {
@@ -156,13 +120,7 @@ fun CreationModeRuler(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            "Color for new shapes",
-            style = MaterialTheme.typography.labelLarge,
-            color = scheme.onSurfaceVariant
-        )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -174,7 +132,7 @@ fun CreationModeRuler(
                 selected = session.spawnColor == null,
                 onClick = { onSessionChange(session.copy(spawnColor = null)) }
             ) {
-                Text("Auto", style = MaterialTheme.typography.labelSmall, color = scheme.onSurface)
+                Text("A", style = MaterialTheme.typography.labelLarge, color = scheme.onSurface)
             }
             for (preset in CreationColorPresets) {
                 val c = session.spawnColor
@@ -201,17 +159,9 @@ fun CreationModeRuler(
                 }
             }
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.4f))
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Toggles: double-tap a shape to open its menu. Physics runs again when the menu " +
-                "closes unless you paused with the play/pause control above.",
-            style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurfaceVariant,
-            lineHeight = MaterialTheme.typography.bodySmall.lineHeight * 1.2f
-        )
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         RulerPlayPauseControl(
             pausedByRuler = session.physicsPaused,
             onToggle = {
@@ -219,17 +169,17 @@ fun CreationModeRuler(
             }
         )
         RulerSwitchRow(
-            label = "No color change while dragging",
+            label = "No hue (drag)",
             checked = session.disableHueWhileDragging,
             onChecked = { onSessionChange(session.copy(disableHueWhileDragging = it)) }
         )
         RulerSwitchRow(
-            label = "New shapes are pinned (fixed in place until dragged)",
+            label = "Pin new",
             checked = session.newShapesPinned,
             onChecked = { onSessionChange(session.copy(newShapesPinned = it)) }
         )
         RulerSwitchRow(
-            label = "New shapes never time out (immortal)",
+            label = "No timeout",
             checked = session.newShapesImmortal,
             onChecked = { onSessionChange(session.copy(newShapesImmortal = it)) }
         )
@@ -401,18 +351,12 @@ private fun RulerPlayPauseControl(
     onToggle: () -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    Row(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 2.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            "Pause physics (ruler)",
-            style = MaterialTheme.typography.bodyMedium,
-            color = scheme.onSurface
-        )
         IconButton(
             onClick = onToggle,
             modifier = Modifier.size(40.dp)
@@ -462,6 +406,53 @@ private fun RulerSwitchRow(
                 checkedThumbColor = scheme.primary,
                 checkedTrackColor = scheme.primaryContainer
             )
+        )
+    }
+}
+
+/**
+ * Straightedge + tick marks (symbolic ruler). Used in the creation bar and on the float handle.
+ */
+@Composable
+fun RulerLineIcon(
+    color: Color,
+    modifier: Modifier = Modifier,
+    size: DpSize = DpSize(32.dp, 20.dp)
+) {
+    Canvas(modifier.size(size.width, size.height)) {
+        val pad = 1.5f
+        val w = this.size.width
+        val h = this.size.height
+        val y1 = h * 0.35f
+        val y2 = h * 0.7f
+        val stroke = (minOf(w, h) * 0.06f).coerceIn(1.2f, 2.8f)
+        drawLine(
+            color = color,
+            start = Offset(pad, y1),
+            end = Offset(w - pad, y1),
+            strokeWidth = stroke,
+            cap = StrokeCap.Round
+        )
+        var x = pad + 2f
+        var i = 0
+        while (x < w - pad) {
+            val th = if (i % 5 == 0) 0.22f * h else 0.1f * h
+            drawLine(
+                color = color,
+                start = Offset(x, y1 + stroke * 0.3f),
+                end = Offset(x, y1 + th),
+                strokeWidth = stroke * 0.55f,
+                cap = StrokeCap.Round
+            )
+            x += w * 0.09f
+            i++
+        }
+        drawLine(
+            color = color,
+            start = Offset(pad * 0.8f, y2),
+            end = Offset(w * 0.4f, y2),
+            strokeWidth = stroke * 0.85f,
+            cap = StrokeCap.Round
         )
     }
 }
