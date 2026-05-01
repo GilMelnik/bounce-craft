@@ -413,13 +413,14 @@ private fun MainMenuScreen(
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) { Text("Play") }
-                OutlinedButton(
+                Button(
                     modifier = Modifier
                         .width(220.dp)
                         .padding(top = 12.dp),
                     onClick = onCreation,
-                    colors = ButtonDefaults.outlinedButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) { Text("Creation Mode") }
                 Button(
