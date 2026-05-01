@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
@@ -635,6 +634,11 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
             "Tap outside the shape and toolbar to finish"
         } else {
             null
+        },
+        belowBodyContent = if (menuRevealed) {
+            { ShapeMenuExplainSection() }
+        } else {
+            null
         }
     ) {
         BoxWithConstraints(
@@ -652,8 +656,8 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
             val screenH = with(density) { maxHeight.toPx() }
 
             val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
-            val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
-            val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
+            val menuIconInkForBar = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
+            val menuIconInkDimForBar = menuIconInkForBar.copy(alpha = 0.45f)
 
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawTutorialShapes(shapes)
@@ -746,62 +750,6 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
             shapes.firstOrNull()?.let { shape ->
                 if (menuRevealed) {
-                    val shapeRectPx = tutorialShapeVisualRect(shape)
-                    val menuRectPx = contextMenuScreenBounds(
-                        shape,
-                        menuSize,
-                        estMenuW,
-                        estMenuH,
-                        marginPx,
-                        gapPx,
-                        screenW,
-                        screenH
-                    )
-                    val explainPadPx = with(density) { 10.dp.toPx() }
-                    val estExplainHPx = with(density) { 96.dp.toPx() }
-                    val explainColumnW = maxWidth - 8.dp
-                    val clusterBottomPx = maxOf(shapeRectPx.bottom, menuRectPx.bottom)
-                    val belowExplainTopPx = clusterBottomPx + explainPadPx
-                    val fitsBelow =
-                        belowExplainTopPx + estExplainHPx <= screenH - marginPx
-                    val sideColumnPx = with(density) { 148.dp.toPx() }
-                    val spaceLeftPx = shapeRectPx.left - marginPx - explainPadPx
-                    val spaceRightPx =
-                        screenW - marginPx - explainPadPx - shapeRectPx.right
-                    val shapeCenterYPx = (shapeRectPx.top + shapeRectPx.bottom) / 2f
-                    val sideExplainTopPx =
-                        (shapeCenterYPx - estExplainHPx / 2f).coerceIn(
-                            marginPx,
-                            screenH - estExplainHPx - marginPx
-                        )
-                    val explainOffset = when {
-                        fitsBelow -> IntOffset(
-                            marginPx.roundToInt(),
-                            belowExplainTopPx.roundToInt()
-                        )
-
-                        spaceLeftPx >= sideColumnPx -> IntOffset(
-                            (shapeRectPx.left - sideColumnPx - explainPadPx)
-                                .coerceAtLeast(marginPx)
-                                .roundToInt(),
-                            sideExplainTopPx.roundToInt()
-                        )
-
-                        spaceRightPx >= sideColumnPx -> IntOffset(
-                            (shapeRectPx.right + explainPadPx)
-                                .coerceAtMost(screenW - sideColumnPx - marginPx)
-                                .roundToInt(),
-                            sideExplainTopPx.roundToInt()
-                        )
-
-                        else -> IntOffset(
-                            marginPx.roundToInt(),
-                            belowExplainTopPx
-                                .coerceAtMost(screenH - estExplainHPx - marginPx)
-                                .roundToInt()
-                        )
-                    }
-
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopStart)
@@ -824,45 +772,13 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
                     ) {
                         ShapeContextMenuBar(
                             shape = shape,
-                            menuIconInk = menuIconInk,
-                            menuIconInkDim = menuIconInkDim,
+                            menuIconInk = menuIconInkForBar,
+                            menuIconInkDim = menuIconInkDimForBar,
                             onDelete = {},
                             onTogglePin = {},
                             onToggleImmortal = {},
                             onToggleFreezeHueWhileDragging = {},
                             rulerHueGloballyLocked = false
-                        )
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .offset { explainOffset }
-                            .widthIn(max = explainColumnW)
-                            .padding(end = 4.dp)
-                            .zIndex(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ShapeMenuExplainRow(
-                            icon = Icons.Filled.Delete,
-                            tint = menuIconInk,
-                            text = "Delete this shape."
-                        )
-                        ShapeMenuExplainRow(
-                            icon = Icons.Filled.PushPin,
-                            tint = menuIconInkDim,
-                            text = "Pin: stays still until you drag it."
-                        )
-                        ShapeMenuExplainRow(
-                            icon = Icons.Outlined.Timer,
-                            tint = menuIconInkDim,
-                            text = "Timer: may time out; tap ∞ to keep forever."
-                        )
-                        ShapeMenuExplainRow(
-                            icon = Icons.Outlined.LockOpen,
-                            tint = Color.White,
-                            rainbowGradient = true,
-                            text = "Hue lock off: color shifts while dragging."
                         )
                     }
                 }
@@ -872,13 +788,51 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 }
 
 @Composable
+private fun ShapeMenuExplainSection() {
+    val scheme = MaterialTheme.colorScheme
+    val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
+    val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
+    val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ShapeMenuExplainRow(
+            icon = Icons.Filled.Delete,
+            tint = menuIconInk,
+            text = "Delete this shape.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Filled.PushPin,
+            tint = menuIconInkDim,
+            text = "Pin: stays still until you drag it.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Outlined.Timer,
+            tint = menuIconInkDim,
+            text = "Timer: may time out; tap ∞ to keep forever.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Outlined.LockOpen,
+            tint = Color.White,
+            rainbowGradient = true,
+            text = "Hue lock off: color shifts while dragging.",
+            textColor = scheme.onBackground
+        )
+    }
+}
+
+@Composable
 private fun ShapeMenuExplainRow(
     icon: ImageVector,
     tint: Color,
     text: String,
-    rainbowGradient: Boolean = false
+    rainbowGradient: Boolean = false,
+    textColor: Color = MaterialTheme.colorScheme.onSurface
 ) {
-    val scheme = MaterialTheme.colorScheme
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (rainbowGradient) {
             Icon(
@@ -911,7 +865,7 @@ private fun ShapeMenuExplainRow(
         Text(
             text = text,
             style = MaterialTheme.typography.bodySmall,
-            color = scheme.onSurface,
+            color = textColor,
             maxLines = 2
         )
     }
@@ -924,6 +878,7 @@ private fun TutorialStepLayout(
     step: Int,
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
+    belowBodyContent: (@Composable () -> Unit)? = null,
     windowContent: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -978,6 +933,10 @@ private fun TutorialStepLayout(
                             textAlign = TextAlign.Start,
                             modifier = Modifier.fillMaxWidth()
                         )
+                        if (belowBodyContent != null) {
+                            Spacer(Modifier.height(16.dp))
+                            belowBodyContent()
+                        }
                         Spacer(Modifier.height(20.dp))
                         TutorialFooter(step = step, hint = footerHint)
                     }
@@ -1018,6 +977,12 @@ private fun TutorialStepLayout(
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    if (belowBodyContent != null) {
+                        Spacer(Modifier.height(16.dp))
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            belowBodyContent()
+                        }
+                    }
                     Spacer(Modifier.height(40.dp))
                 }
 
