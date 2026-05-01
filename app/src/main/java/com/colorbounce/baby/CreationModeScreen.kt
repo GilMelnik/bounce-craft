@@ -165,6 +165,7 @@ fun CreationModeScreen(
     ) {
         val pointerKey = listOf(
             session.spawnType,
+            session.defaultShapeSelectionMode,
             session.spawnColor,
             session.newShapesPinned,
             session.newShapesImmortal,

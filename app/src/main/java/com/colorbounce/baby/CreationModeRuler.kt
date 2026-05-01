@@ -28,6 +28,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PushPin
@@ -108,9 +110,34 @@ fun CreationModeRuler(
         ) {
             RulerIconChip(
                 selected = session.spawnType == null,
-                onClick = { onSessionChange(session.copy(spawnType = null)) }
-            ) {
-                RulerShapeTypeGlyph(ShapeType.CIRCLE, isDefault = true, tint = it)
+                onClick = {
+                    if (session.spawnType == null) {
+                        val next = when (session.defaultShapeSelectionMode) {
+                            ShapeSelectionMode.ALTERNATE -> ShapeSelectionMode.RANDOM
+                            ShapeSelectionMode.RANDOM -> ShapeSelectionMode.ALTERNATE
+                        }
+                        onSessionChange(session.copy(defaultShapeSelectionMode = next))
+                    } else {
+                        onSessionChange(session.copy(spawnType = null))
+                    }
+                },
+                contentDescription = when (session.defaultShapeSelectionMode) {
+                    ShapeSelectionMode.ALTERNATE ->
+                        "Default shapes: alternate. Tap to switch to random."
+                    ShapeSelectionMode.RANDOM ->
+                        "Default shapes: random. Tap to switch to alternate."
+                }
+            ) { tint ->
+                val icon = when (session.defaultShapeSelectionMode) {
+                    ShapeSelectionMode.ALTERNATE -> Icons.Filled.Repeat
+                    ShapeSelectionMode.RANDOM -> Icons.Filled.Shuffle
+                }
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    modifier = Modifier.size(22.dp),
+                    tint = tint
+                )
             }
             for (t in listOf(
                 ShapeType.CIRCLE,

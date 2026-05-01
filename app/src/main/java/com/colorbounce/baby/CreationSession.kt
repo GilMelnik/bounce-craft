@@ -5,6 +5,8 @@ package com.colorbounce.baby
  */
 data class CreationSession(
     val spawnType: ShapeType? = null,
+    /** When [spawnType] is null, picks among [AppSettings.selectedShapes] using this mode. */
+    val defaultShapeSelectionMode: ShapeSelectionMode = ShapeSelectionMode.ALTERNATE,
     /** When non-null, new shapes use this HSV; otherwise use default random/HSV behavior. */
     val spawnColor: Triple<Float, Float, Float>? = null,
     val newShapesPinned: Boolean = false,

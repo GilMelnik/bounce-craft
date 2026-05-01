@@ -237,7 +237,10 @@ class GameViewModel : ViewModel() {
             }
 
             val newType = when (val t = creation?.spawnType) {
-                null -> chooseType(settings.selectedShapes, settings.shapeSelectionMode)
+                null -> chooseType(
+                    settings.selectedShapes,
+                    if (creation != null) creation.defaultShapeSelectionMode else settings.shapeSelectionMode
+                )
                 else -> t
             }
             val size = 70f
@@ -552,7 +555,10 @@ class GameViewModel : ViewModel() {
             }
 
             val newType = when (val t = creation?.spawnType) {
-                null -> chooseType(settings.selectedShapes, settings.shapeSelectionMode)
+                null -> chooseType(
+                    settings.selectedShapes,
+                    if (creation != null) creation.defaultShapeSelectionMode else settings.shapeSelectionMode
+                )
                 else -> t
             }
             val size = Random.nextFloat() * (150f - 60f) + 60f
