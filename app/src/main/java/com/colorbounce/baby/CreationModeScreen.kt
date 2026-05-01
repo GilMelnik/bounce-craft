@@ -1,6 +1,5 @@
 package com.colorbounce.baby
 
-import android.os.SystemClock
 import android.util.Log
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
@@ -25,15 +24,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -49,16 +44,11 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
@@ -93,17 +83,6 @@ private val CreationExitRulerTopPadding =
 private fun Density.creationExitTrailingInsetPx(): Float = CreationExitRulerEndPadding.toPx()
 
 private fun Density.creationExitTopClearancePx(): Float = CreationExitRulerTopPadding.toPx()
-
-/** Spectrum for the open (unlocked) hue-lock icon — reads as “color” in any theme. */
-private val rainbowLockOpenGradientColors = listOf(
-    Color(0xFFFF1744),
-    Color(0xFFFF9100),
-    Color(0xFFFFEA00),
-    Color(0xFF00E676),
-    Color(0xFF00B0FF),
-    Color(0xFFD500F9),
-    Color(0xFFFF1744)
-)
 
 private enum class RulerScreenEdge { Top, Bottom, Start, End }
 
@@ -937,100 +916,6 @@ fun CreationModeScreen(
 }
 
 @Composable
-private fun ShapeContextMenuIconButton(
-    onClick: () -> Unit,
-    imageVector: ImageVector,
-    contentDescription: String,
-    tint: Color,
-    emphasized: Boolean = false
-) {
-    val scheme = MaterialTheme.colorScheme
-    IconButton(
-        onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = if (emphasized) {
-                scheme.primaryContainer.copy(alpha = 0.92f)
-            } else {
-                Color.Transparent
-            },
-            contentColor = tint
-        )
-    ) {
-        Icon(
-            imageVector = imageVector,
-            contentDescription = contentDescription,
-            tint = tint
-        )
-    }
-}
-
-@Composable
-private fun ShapeContextMenuHueLockButton(
-    shape: GameShape,
-    rulerHueGloballyLocked: Boolean,
-    onClick: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    val shapeBodyColor = shape.color
-    val lockedVisual = if (rulerHueGloballyLocked) {
-        !shape.exemptFromGlobalHueLock
-    } else {
-        shape.freezeHueWhileDragging
-    }
-    val emphasized = if (rulerHueGloballyLocked) {
-        shape.exemptFromGlobalHueLock
-    } else {
-        shape.freezeHueWhileDragging
-    }
-    val (openDesc, closedDesc) = if (rulerHueGloballyLocked) {
-        "This shape can shift hue while dragging (overrides ruler lock). Tap to follow ruler lock like other shapes." to
-            "Hue locked while dragging (same as ruler). Tap to allow only this shape to shift hue when dragged."
-    } else {
-        "Tap to freeze hue while dragging this shape." to
-            "Hue frozen while dragging this shape. Tap to allow hue to shift."
-    }
-    IconButton(
-        onClick = onClick,
-        colors = IconButtonDefaults.iconButtonColors(
-            containerColor = if (emphasized) {
-                scheme.primaryContainer.copy(alpha = 0.92f)
-            } else {
-                Color.Transparent
-            },
-            contentColor = if (lockedVisual) shapeBodyColor else Color.White
-        )
-    ) {
-        if (lockedVisual) {
-            Icon(
-                imageVector = Icons.Filled.Lock,
-                contentDescription = closedDesc,
-                tint = shapeBodyColor
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Outlined.LockOpen,
-                contentDescription = openDesc,
-                tint = Color.White,
-                modifier = Modifier.drawWithCache {
-                    val brush = Brush.linearGradient(
-                        colors = rainbowLockOpenGradientColors,
-                        start = Offset.Zero,
-                        end = Offset(size.width, size.height)
-                    )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(
-                            brush = brush,
-                            blendMode = BlendMode.SrcIn
-                        )
-                    }
-                }
-            )
-        }
-    }
-}
-
-@Composable
 private fun CreationRulerMinimizedControl(
     rulerScreenEdge: RulerScreenEdge,
     alongFraction: Float,
@@ -1174,51 +1059,5 @@ private fun CreationRulerMinimizedControl(
                 }
             }
         }
-    }
-}
-
-/** Menu bar bounds in playfield coordinates (matches [CreationModeScreen] menu placement). */
-private fun contextMenuScreenBounds(
-    shape: GameShape,
-    menuSize: IntSize,
-    estMenuW: Float,
-    estMenuH: Float,
-    marginPx: Float,
-    gapPx: Float,
-    screenW: Float,
-    screenH: Float
-): Rect {
-    val menuW = if (menuSize.width > 0) menuSize.width.toFloat() else estMenuW
-    val menuH = if (menuSize.height > 0) menuSize.height.toFloat() else estMenuH
-    var x = shape.x - menuW / 2f
-    var y = shape.y + shape.height / 2f + gapPx
-    if (y + menuH > screenH - marginPx) {
-        y = shape.y - shape.height / 2f - gapPx - menuH
-    }
-    x = x.coerceIn(marginPx, screenW - menuW - marginPx)
-    y = y.coerceIn(marginPx, screenH - menuH - marginPx)
-    return Rect(x, y, x + menuW, y + menuH)
-}
-
-/** Pairs a quick down after a short tap on the same shape to open the shape menu (double-tap). */
-private class DoubleTapState {
-    private var lastTapUptime = 0L
-    private var lastTapShapeId: Long? = null
-
-    fun clear() {
-        lastTapUptime = 0L
-        lastTapShapeId = null
-    }
-
-    fun recordShapeTap(shapeId: Long) {
-        lastTapUptime = SystemClock.uptimeMillis()
-        lastTapShapeId = shapeId
-    }
-
-    fun isSecondTapOnShape(shapeId: Long): Boolean {
-        val t = SystemClock.uptimeMillis()
-        val v = lastTapShapeId == shapeId && t - lastTapUptime in 1L..400L
-        if (v) clear()
-        return v
     }
 }

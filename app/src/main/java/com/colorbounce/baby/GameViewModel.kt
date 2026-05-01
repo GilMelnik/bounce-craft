@@ -40,11 +40,19 @@ class GameViewModel : ViewModel() {
     private var lastAutoSpawnGameMillis = 0L
     private var inCreationModeSession = false
 
+    /** Normal play: freezes physics while the shape context menu is open (double-tap). */
+    private var physicsPausedForShapeContextMenu = false
+
+    fun setShapeContextMenuOpen(open: Boolean) {
+        physicsPausedForShapeContextMenu = open
+    }
+
     private val _creationAtCapacity = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val creationAtCapacity: SharedFlow<Unit> = _creationAtCapacity.asSharedFlow()
 
     fun onGameExit() {
         try {
+            physicsPausedForShapeContextMenu = false
             clearInteractionState()
             resetAutoSpawnTimers()
             Log.d(TAG, "Game exited at gameTime=$gameTimeMillis")
@@ -69,6 +77,7 @@ class GameViewModel : ViewModel() {
          try {
              if (inCreationModeSession) return
              inCreationModeSession = true
+             physicsPausedForShapeContextMenu = false
              _shapes.value = emptyList()
              nextId = 1L
              lastTypeIndex.set(0)
@@ -125,7 +134,15 @@ class GameViewModel : ViewModel() {
     fun removeShape(id: Long) {
         _shapes.value = _shapes.value.filter { it.id != id }
         val toRemove = activeShapes.filter { it.value == id }.keys
-        toRemove.forEach { activeShapes.remove(it) }
+        toRemove.forEach { cleanupPointer(it) }
+        fingerCreatedShapeIds.remove(id)
+    }
+
+    /** Drops stale pointer capture for [shapeId] (e.g. shape menu overlay gesture cancelled mid-drag). */
+    fun clearPointersTargetingShape(shapeId: Long) {
+        val pointerIds = activeShapes.filter { it.value == shapeId }.keys.toList()
+        pointerIds.forEach { cleanupPointer(it) }
+        fingerCreatedShapeIds.remove(shapeId)
     }
 
     fun setShapePinned(id: Long, pinned: Boolean) {
@@ -437,7 +454,7 @@ class GameViewModel : ViewModel() {
             }
 
             val c = creation
-            if (c != null && c.physicsPaused) {
+            if ((c != null && c.physicsPaused) || physicsPausedForShapeContextMenu) {
                 val activeIds = activeShapes.values.toSet()
                 _shapes.value = _shapes.value.map { shape ->
                     if (!activeIds.contains(shape.id)) return@map shape
@@ -532,7 +549,7 @@ class GameViewModel : ViewModel() {
 
     private fun checkAutoSpawn(now: Long, settings: AppSettings, creation: CreationSession?) {
         try {
-            if (creation?.physicsPaused == true) return
+            if (creation?.physicsPaused == true || physicsPausedForShapeContextMenu) return
             val inactivityTimeoutMs = settings.autoSpawnInactivitySeconds * 1000L
             if (inactivityTimeoutMs <= 0) return
             if (now - lastUserInteractionGameMillis > inactivityTimeoutMs) {

@@ -14,6 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,6 +22,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
@@ -30,6 +32,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.AllInclusive
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
@@ -44,25 +50,33 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -76,8 +90,10 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private const val EXIT_BUTTON_TAG = "exit_button"
 private const val TUTORIAL_BUTTON_TAG = "tutorial_button"
@@ -576,6 +592,23 @@ private fun AboutScreen(onBack: () -> Unit) {
 @Composable
 private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: () -> Unit) {
     val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
+    var contextMenuShapeId by remember { mutableStateOf<Long?>(null) }
+    val contextMenuIdRef = rememberUpdatedState(contextMenuShapeId)
+    val doubleTap = remember { DoubleTapState() }
+    val slopPx = with(LocalDensity.current) { 20.dp.toPx() }
+    val dismissShapeMenu by rememberUpdatedState(newValue = {
+        contextMenuIdRef.value?.let { viewModel.clearPointersTargetingShape(it) }
+        contextMenuShapeId = null
+    })
+
+    DisposableEffect(Unit) {
+        onDispose { viewModel.setShapeContextMenuOpen(false) }
+    }
+
+    SideEffect {
+        viewModel.setShapeContextMenuOpen(contextMenuShapeId != null)
+    }
+
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val exitButtonBg = MaterialTheme.colorScheme.surfaceVariant
 
@@ -594,6 +627,14 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         }
     }
 
+    val pointerKey = listOf(
+        contextMenuShapeId,
+        settings.shapeMode,
+        settings.maxShapes,
+        settings.selectedShapes,
+        settings.shapeSelectionMode
+    ).toString()
+
     // Use theme background; avoid hardcoded colors so dark/light stay readable.
     Box(
         modifier = Modifier
@@ -611,43 +652,271 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
             shapes = shapes,
             modifier = Modifier
                 .fillMaxSize()
-                .pointerInput(settings.shapeMode, settings.maxShapes) {
-                    awaitPointerEventScope {
-                        try {
-                            while (true) {
-                                val event = awaitPointerEvent()
-                                event.changes.forEach { change ->
-                                    val pointerId = change.id.value
-                                    when {
-                                        change.pressed && !change.previousPressed -> {
-                                            viewModel.startInteraction(
-                                                change.position,
-                                                settings,
-                                                pointerId
-                                            )
-                                        }
+                .then(
+                    if (contextMenuShapeId == null) {
+                        Modifier.pointerInput(pointerKey) {
+                            awaitPointerEventScope {
+                                val downPos = mutableMapOf<Long, Offset>()
+                                try {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        eventLoop@ for (change in event.changes) {
+                                            val pid = change.id.value
+                                            when {
+                                                change.pressed && !change.previousPressed -> {
+                                                    val hit = viewModel.shapeAt(change.position)
+                                                    if (hit != null && doubleTap.isSecondTapOnShape(hit.id)) {
+                                                        contextMenuShapeId = hit.id
+                                                        viewModel.resetShapeLifetimeTimer(hit.id)
+                                                        downPos[pid] = change.position
+                                                        continue@eventLoop
+                                                    }
+                                                    if (hit == null) {
+                                                        doubleTap.clear()
+                                                    }
+                                                    viewModel.startInteraction(
+                                                        change.position,
+                                                        settings,
+                                                        pid
+                                                    )
+                                                    downPos[pid] = change.position
+                                                }
 
-                                        change.pressed && change.previousPressed -> {
-                                            val dragAmount = change.position - change.previousPosition
-                                            viewModel.onDrag(
-                                                change.position,
-                                                dragAmount,
-                                                settings,
-                                                pointerId
-                                            )
-                                        }
+                                                change.pressed && change.previousPressed -> {
+                                                    val drag = change.position - change.previousPosition
+                                                    viewModel.onDrag(
+                                                        change.position,
+                                                        drag,
+                                                        settings,
+                                                        pid
+                                                    )
+                                                }
 
-                                        !change.pressed && change.previousPressed -> {
-                                            viewModel.endInteraction(settings, pointerId)
+                                                !change.pressed && change.previousPressed -> {
+                                                    val start = downPos.remove(pid) ?: run {
+                                                        viewModel.endInteraction(settings, pid)
+                                                        continue@eventLoop
+                                                    }
+                                                    val moved =
+                                                        (change.position - start).getDistance() > slopPx
+                                                    val activeId = viewModel.activeShapeIdFor(pid)
+                                                    if (activeId != null) {
+                                                        if (!moved) {
+                                                            doubleTap.recordShapeTap(activeId)
+                                                        } else {
+                                                            doubleTap.clear()
+                                                        }
+                                                    } else if (!moved) {
+                                                        viewModel.shapeAt(change.position)
+                                                            ?.id
+                                                            ?.let { doubleTap.recordShapeTap(it) }
+                                                    } else {
+                                                        doubleTap.clear()
+                                                    }
+                                                    viewModel.endInteraction(settings, pid)
+                                                }
+                                            }
                                         }
+                                    }
+                                } catch (_: Exception) {
+                                }
+                            }
+                        }
+                    } else {
+                        Modifier
+                    }
+                )
+        )
+
+        contextMenuShapeId?.let { id ->
+            val shape = shapes.find { it.id == id }
+            if (shape == null) {
+                viewModel.clearPointersTargetingShape(id)
+                contextMenuShapeId = null
+            } else {
+                val scheme = MaterialTheme.colorScheme
+                val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
+                val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
+                val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
+                val latestShapeForMenu = rememberUpdatedState(shape)
+                BoxWithConstraints(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(5f)
+                ) {
+                    val density = LocalDensity.current
+                    var menuSize by remember(id) { mutableStateOf(IntSize.Zero) }
+                    val marginPx = with(density) { 8.dp.toPx() }
+                    val gapPx = with(density) { 10.dp.toPx() }
+                    val estMenuW = with(density) { 220.dp.toPx() }
+                    val estMenuH = with(density) { 56.dp.toPx() }
+                    val screenW = with(density) { maxWidth.toPx() }
+                    val screenH = with(density) { maxHeight.toPx() }
+
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .align(Alignment.TopStart)
+                            .pointerInput(id, menuSize, settings.maxShapes) {
+                                awaitPointerEventScope {
+                                    val overlayDownPos = mutableMapOf<Long, Offset>()
+                                    val draggingSelectedShape = mutableMapOf<Long, Boolean>()
+                                    try {
+                                        while (true) {
+                                            val event = awaitPointerEvent()
+                                            for (change in event.changes) {
+                                                val pid = change.id.value
+                                                when {
+                                                    change.pressed && !change.previousPressed -> {
+                                                        val p = change.position
+                                                        val menuRect = contextMenuScreenBounds(
+                                                            latestShapeForMenu.value,
+                                                            menuSize,
+                                                            estMenuW,
+                                                            estMenuH,
+                                                            marginPx,
+                                                            gapPx,
+                                                            screenW,
+                                                            screenH
+                                                        )
+                                                        if (menuRect.contains(p)) continue
+                                                        val hit = viewModel.shapeAt(p)
+                                                        if (hit?.id == id) {
+                                                            viewModel.startInteraction(
+                                                                p,
+                                                                settings,
+                                                                pid
+                                                            )
+                                                            overlayDownPos[pid] = p
+                                                            draggingSelectedShape[pid] = true
+                                                        } else {
+                                                            overlayDownPos[pid] = p
+                                                            draggingSelectedShape[pid] = false
+                                                        }
+                                                    }
+
+                                                    change.pressed && change.previousPressed -> {
+                                                        if (draggingSelectedShape[pid] == true) {
+                                                            val drag =
+                                                                change.position - change.previousPosition
+                                                            viewModel.onDrag(
+                                                                change.position,
+                                                                drag,
+                                                                settings,
+                                                                pid
+                                                            )
+                                                        }
+                                                    }
+
+                                                    !change.pressed && change.previousPressed -> {
+                                                        val wasDraggingSelected =
+                                                            draggingSelectedShape.remove(pid)
+                                                        val start = overlayDownPos.remove(pid)
+                                                        when {
+                                                            wasDraggingSelected == true -> {
+                                                                viewModel.endInteraction(
+                                                                    settings,
+                                                                    pid,
+                                                                    applyLaunchVelocity = false
+                                                                )
+                                                            }
+
+                                                            wasDraggingSelected == false && start != null -> {
+                                                                val moved =
+                                                                    (change.position - start).getDistance() >
+                                                                        slopPx
+                                                                if (!moved) dismissShapeMenu()
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (_: Exception) {
                                     }
                                 }
                             }
-                        } catch (_: Exception) {
+                    )
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .offset {
+                                val menuW =
+                                    if (menuSize.width > 0) menuSize.width.toFloat() else estMenuW
+                                val menuH =
+                                    if (menuSize.height > 0) menuSize.height.toFloat() else estMenuH
+                                var x = shape.x - menuW / 2f
+                                var y = shape.y + shape.height / 2f + gapPx
+                                if (y + menuH > screenH - marginPx) {
+                                    y = shape.y - shape.height / 2f - gapPx - menuH
+                                }
+                                x = x.coerceIn(marginPx, screenW - menuW - marginPx)
+                                y = y.coerceIn(marginPx, screenH - menuH - marginPx)
+                                IntOffset(x.roundToInt(), y.roundToInt())
+                            }
+                            .onSizeChanged { menuSize = it }
+                    ) {
+                        Surface(
+                            shape = MaterialTheme.shapes.large,
+                            color = scheme.surfaceContainerHigh,
+                            tonalElevation = 3.dp,
+                            shadowElevation = 4.dp
+                        ) {
+                            Row(
+                                Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                ShapeContextMenuIconButton(
+                                    onClick = {
+                                        viewModel.removeShape(id)
+                                        contextMenuShapeId = null
+                                    },
+                                    imageVector = Icons.Filled.Delete,
+                                    contentDescription = "Delete shape",
+                                    tint = menuIconInk
+                                )
+                                ShapeContextMenuIconButton(
+                                    onClick = {
+                                        viewModel.setShapePinned(id, !shape.isPinned)
+                                    },
+                                    imageVector = Icons.Filled.PushPin,
+                                    contentDescription =
+                                        "Pin this shape. Pinned shapes stay still until you drag them.",
+                                    tint = if (shape.isPinned) menuIconInk else menuIconInkDim,
+                                    emphasized = shape.isPinned
+                                )
+                                ShapeContextMenuIconButton(
+                                    onClick = {
+                                        viewModel.setShapeImmortal(id, !shape.isImmortal)
+                                    },
+                                    imageVector = if (shape.isImmortal) {
+                                        Icons.Filled.AllInclusive
+                                    } else {
+                                        Icons.Outlined.Timer
+                                    },
+                                    contentDescription =
+                                        "Keep this shape from timing out. Tap again to allow timeout.",
+                                    tint = if (shape.isImmortal) menuIconInk else menuIconInkDim,
+                                    emphasized = shape.isImmortal
+                                )
+                                ShapeContextMenuHueLockButton(
+                                    shape = shape,
+                                    rulerHueGloballyLocked = false,
+                                    onClick = {
+                                        viewModel.setShapeFreezeHueWhileDragging(
+                                            id,
+                                            !shape.freezeHueWhileDragging
+                                        )
+                                    }
+                                )
+                            }
                         }
                     }
                 }
-        )
+            }
+        }
 
         // Small always-visible exit affordance.
         Box(
