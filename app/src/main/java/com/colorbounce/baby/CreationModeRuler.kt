@@ -44,8 +44,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.RectangleShape
@@ -336,19 +339,36 @@ private fun RulerHueLockControlButton(
         modifier = Modifier.size(44.dp),
         colors = lockColors
     ) {
-        Icon(
-            imageVector = if (session.disableHueWhileDragging) {
-                Icons.Filled.Lock
-            } else {
-                Icons.Outlined.LockOpen
-            },
-            contentDescription = if (session.disableHueWhileDragging) {
-                "Hue frozen while moving. Tap to allow shifting when dragging."
-            } else {
-                "Tap to freeze hue while moving shapes."
-            },
-            modifier = Modifier.size(22.dp)
-        )
+        if (session.disableHueWhileDragging) {
+            Icon(
+                imageVector = Icons.Filled.Lock,
+                contentDescription =
+                    "Hue frozen while moving. Tap to allow shifting when dragging.",
+                modifier = Modifier.size(22.dp)
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Outlined.LockOpen,
+                contentDescription = "Tap to freeze hue while moving shapes.",
+                tint = Color.White,
+                modifier = Modifier
+                    .size(22.dp)
+                    .drawWithCache {
+                        val brush = Brush.linearGradient(
+                            colors = rainbowLockOpenGradientColors,
+                            start = Offset.Zero,
+                            end = Offset(size.width, size.height)
+                        )
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = brush,
+                                blendMode = BlendMode.SrcIn
+                            )
+                        }
+                    }
+            )
+        }
     }
 }
 
