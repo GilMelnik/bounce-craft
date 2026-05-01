@@ -24,9 +24,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.PushPin
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -336,6 +337,12 @@ fun CreationModeScreen(
                                 if (newSession.spawnColor != session.spawnColor) {
                                     viewModel.applySpawnColorFromRulerToAllShapes(newSession.spawnColor)
                                 }
+                                if (newSession.newShapesPinned != session.newShapesPinned) {
+                                    viewModel.applyGlobalPinFromRuler(newSession.newShapesPinned)
+                                }
+                                if (newSession.newShapesImmortal != session.newShapesImmortal) {
+                                    viewModel.applyGlobalImmortalFromRuler(newSession.newShapesImmortal)
+                                }
                                 session = newSession
                             },
                             onCollapse = { rulerExpanded = false },
@@ -509,16 +516,70 @@ fun CreationModeScreen(
                                     tint = menuIconInk
                                 )
                                 ShapeContextMenuIconButton(
-                                    onClick = { viewModel.setShapePinned(id, !shape.isPinned) },
+                                    onClick = {
+                                        if (session.newShapesPinned) {
+                                            viewModel.setShapeExemptFromGlobalPin(
+                                                id,
+                                                !shape.exemptFromGlobalPin
+                                            )
+                                        } else {
+                                            viewModel.setShapePinned(id, !shape.isPinned)
+                                        }
+                                    },
                                     imageVector = Icons.Filled.PushPin,
-                                    contentDescription = "Pin shape",
-                                    tint = if (shape.isPinned) menuIconInk else menuIconInkDim
+                                    contentDescription = if (session.newShapesPinned) {
+                                        "Ruler pins all shapes. Tap to unpin only this shape, or tap again to follow the ruler."
+                                    } else {
+                                        "Pin this shape. Turn on ruler pin to pin every shape at once."
+                                    },
+                                    tint = when {
+                                        session.newShapesPinned && !shape.exemptFromGlobalPin ->
+                                            menuIconInk
+                                        session.newShapesPinned && shape.exemptFromGlobalPin ->
+                                            menuIconInkDim
+                                        shape.isPinned -> menuIconInk
+                                        else -> menuIconInkDim
+                                    },
+                                    emphasized = (session.newShapesPinned && shape.exemptFromGlobalPin) ||
+                                        (!session.newShapesPinned && shape.isPinned)
                                 )
                                 ShapeContextMenuIconButton(
-                                    onClick = { viewModel.setShapeImmortal(id, !shape.isImmortal) },
-                                    imageVector = Icons.Filled.Shield,
-                                    contentDescription = "Immortal shape",
-                                    tint = if (shape.isImmortal) menuIconInk else menuIconInkDim
+                                    onClick = {
+                                        if (session.newShapesImmortal) {
+                                            viewModel.setShapeExemptFromGlobalImmortal(
+                                                id,
+                                                !shape.exemptFromGlobalImmortal
+                                            )
+                                        } else {
+                                            viewModel.setShapeImmortal(id, !shape.isImmortal)
+                                        }
+                                    },
+                                    imageVector = if (
+                                        if (session.newShapesImmortal) {
+                                            !shape.exemptFromGlobalImmortal
+                                        } else {
+                                            shape.isImmortal
+                                        }
+                                    ) {
+                                        Icons.Filled.AllInclusive
+                                    } else {
+                                        Icons.Outlined.Timer
+                                    },
+                                    contentDescription = if (session.newShapesImmortal) {
+                                        "Ruler keeps all shapes forever. Tap so only this shape can time out, or again to match the ruler."
+                                    } else {
+                                        "Keep this shape from timing out. Turn on ruler infinity to apply to every shape."
+                                    },
+                                    tint = when {
+                                        session.newShapesImmortal && !shape.exemptFromGlobalImmortal ->
+                                            menuIconInk
+                                        session.newShapesImmortal && shape.exemptFromGlobalImmortal ->
+                                            menuIconInkDim
+                                        shape.isImmortal -> menuIconInk
+                                        else -> menuIconInkDim
+                                    },
+                                    emphasized = (session.newShapesImmortal && shape.exemptFromGlobalImmortal) ||
+                                        (!session.newShapesImmortal && shape.isImmortal)
                                 )
                                 ShapeContextMenuHueLockButton(
                                     shape = shape,
@@ -562,12 +623,18 @@ private fun ShapeContextMenuIconButton(
     onClick: () -> Unit,
     imageVector: ImageVector,
     contentDescription: String,
-    tint: Color
+    tint: Color,
+    emphasized: Boolean = false
 ) {
+    val scheme = MaterialTheme.colorScheme
     IconButton(
         onClick = onClick,
         colors = IconButtonDefaults.iconButtonColors(
-            containerColor = Color.Transparent,
+            containerColor = if (emphasized) {
+                scheme.primaryContainer.copy(alpha = 0.92f)
+            } else {
+                Color.Transparent
+            },
             contentColor = tint
         )
     ) {

@@ -133,6 +133,56 @@ class GameViewModel : ViewModel() {
         _shapes.value = _shapes.value.map { if (it.id == id) it.copy(isImmortal = immortal) else it }
     }
 
+    fun setShapeExemptFromGlobalPin(id: Long, exempt: Boolean) {
+        _shapes.value = _shapes.value.map {
+            if (it.id == id) it.copy(exemptFromGlobalPin = exempt) else it
+        }
+    }
+
+    fun setShapeExemptFromGlobalImmortal(id: Long, exempt: Boolean) {
+        _shapes.value = _shapes.value.map {
+            if (it.id == id) it.copy(exemptFromGlobalImmortal = exempt) else it
+        }
+    }
+
+    /** Ruler pin toggle: applies to every shape; clears per-shape exemptions. */
+    fun applyGlobalPinFromRuler(allPinned: Boolean) {
+        _shapes.value = _shapes.value.map {
+            it.copy(
+                exemptFromGlobalPin = false,
+                isPinned = allPinned
+            )
+        }
+    }
+
+    /** Ruler lifetime toggle: applies to every shape; clears per-shape exemptions. */
+    fun applyGlobalImmortalFromRuler(allImmortal: Boolean) {
+        _shapes.value = _shapes.value.map {
+            it.copy(
+                exemptFromGlobalImmortal = false,
+                isImmortal = allImmortal
+            )
+        }
+    }
+
+    private fun effectiveIsPinned(shape: GameShape, creation: CreationSession?): Boolean {
+        if (creation == null) return shape.isPinned
+        return if (creation.newShapesPinned) {
+            !shape.exemptFromGlobalPin
+        } else {
+            shape.isPinned
+        }
+    }
+
+    private fun effectiveIsImmortal(shape: GameShape, creation: CreationSession?): Boolean {
+        if (creation == null) return shape.isImmortal
+        return if (creation.newShapesImmortal) {
+            !shape.exemptFromGlobalImmortal
+        } else {
+            shape.isImmortal
+        }
+    }
+
     fun setShapeFreezeHueWhileDragging(id: Long, freeze: Boolean) {
         _shapes.value = _shapes.value.map {
             if (it.id == id) it.copy(freezeHueWhileDragging = freeze) else it
@@ -271,7 +321,8 @@ class GameViewModel : ViewModel() {
             val now = currentGameTimeMillis()
             _shapes.value = _shapes.value.map { shape ->
                 if (shape.id != shapeId) return@map shape
-                val isNewish = shape.vx == 0f && shape.vy == 0f && !shape.isPinned
+                val effPinned = effectiveIsPinned(shape, creation)
+                val isNewish = shape.vx == 0f && shape.vy == 0f && !effPinned
                 val targetSize = if (resizeOnDrag && isNewish) computedSize else shape.width
                 val boundedSize = if (constrainInsideScreen) {
                     targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
@@ -307,8 +358,9 @@ class GameViewModel : ViewModel() {
             recordInteraction()
             val shapeId = activeShapes[pointerId] ?: return
             val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
-            val wasFingerCreated = fingerCreatedShapeIds.remove(shapeId)
-            val wasPinned = _shapes.value.find { it.id == shapeId }?.isPinned == true
+            fingerCreatedShapeIds.remove(shapeId)
+            val shapeBeforeEnd = _shapes.value.find { it.id == shapeId }
+            val wasPinned = shapeBeforeEnd != null && effectiveIsPinned(shapeBeforeEnd, creation)
             if (wasPinned) {
                 _shapes.value = _shapes.value.map {
                     if (it.id == shapeId) {
@@ -322,24 +374,6 @@ class GameViewModel : ViewModel() {
                     }
                 }
                 cleanupPointer(pointerId)
-                return
-            }
-            val nowMillis = currentGameTimeMillis()
-            if (wasFingerCreated && creation?.newShapesPinned == true) {
-                _shapes.value = _shapes.value.map {
-                    if (it.id == shapeId) {
-                        it.copy(
-                            isPinned = true,
-                            vx = 0f,
-                            vy = 0f,
-                            lastInteractionMillis = nowMillis
-                        )
-                    } else {
-                        it
-                    }
-                }
-                cleanupPointer(pointerId)
-                Log.d(TAG, "Interaction ended: shapeId=$shapeId pinned after creation gesture")
                 return
             }
             if (!applyLaunchVelocity) {
@@ -430,7 +464,7 @@ class GameViewModel : ViewModel() {
 
             val activeIds = activeShapes.values.toSet()
             val moved = _shapes.value.mapNotNull { shape ->
-                if (!shape.isImmortal) {
+                if (!effectiveIsImmortal(shape, c)) {
                     if (now - shape.lastInteractionMillis > timeoutMs) {
                         Log.d(TAG, "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s)")
                         return@mapNotNull null
@@ -444,7 +478,7 @@ class GameViewModel : ViewModel() {
                 var vy = shape.vy
 
                 if (!isHeld) {
-                    if (shape.isPinned) {
+                    if (effectiveIsPinned(shape, c)) {
                         x = shape.x
                         y = shape.y
                         vx = 0f
@@ -470,7 +504,7 @@ class GameViewModel : ViewModel() {
                         }
                     }
                 } else {
-                    if (shape.isPinned) {
+                    if (effectiveIsPinned(shape, c)) {
                         vx = 0f
                         vy = 0f
                     }
@@ -493,7 +527,7 @@ class GameViewModel : ViewModel() {
                 )
             }.toMutableList()
 
-            resolvePairCollisions(moved, settings)
+            resolvePairCollisions(moved, settings, c)
             _shapes.value = moved.takeLast(em)
         } catch (e: Exception) {
             Log.e(TAG, "Error in updatePhysics", e)
@@ -602,7 +636,11 @@ class GameViewModel : ViewModel() {
         return gameTimeMillis
     }
 
-    private fun resolvePairCollisions(shapes: MutableList<GameShape>, settings: AppSettings) {
+    private fun resolvePairCollisions(
+        shapes: MutableList<GameShape>,
+        settings: AppSettings,
+        creation: CreationSession? = null
+    ) {
         try {
             val heldIds = activeShapes.values.toSet()
             for (i in 0 until shapes.size) {
@@ -618,7 +656,9 @@ class GameViewModel : ViewModel() {
                     val minDist = ra + rb
                     if (distance >= minDist) continue
 
-                    if (a.isPinned && a.id !in heldIds && b.isPinned && b.id !in heldIds) continue
+                    val aPin = effectiveIsPinned(a, creation)
+                    val bPin = effectiveIsPinned(b, creation)
+                    if (aPin && a.id !in heldIds && bPin && b.id !in heldIds) continue
 
                     val nx = dx / distance
                     val ny = dy / distance
@@ -659,7 +699,7 @@ class GameViewModel : ViewModel() {
                             shapes[i] = keepInside(newA)
                             shapes[j] = keepInside(b)
                         }
-                        a.isPinned && a.id !in heldIds -> {
+                        aPin && a.id !in heldIds -> {
                             val bX = b.x + nx * overlap
                             val bY = b.y + ny * overlap
                             val bVn = b.vx * nx + b.vy * ny
@@ -676,7 +716,7 @@ class GameViewModel : ViewModel() {
                             shapes[i] = keepInside(a)
                             shapes[j] = keepInside(newB)
                         }
-                        b.isPinned && b.id !in heldIds -> {
+                        bPin && b.id !in heldIds -> {
                             val aX = a.x - nx * overlap
                             val aY = a.y - ny * overlap
                             val aVn = a.vx * nx + a.vy * ny

@@ -255,9 +255,9 @@ fun CreationModeRuler(
                         Icons.Outlined.PushPin
                     },
                     contentDescription = if (session.newShapesPinned) {
-                        "Pin new shapes on. Tap to turn off."
+                        "Pin all shapes on. Tap to turn off."
                     } else {
-                        "Tap to pin new shapes in place."
+                        "Tap to pin all shapes in place."
                     },
                     modifier = Modifier.size(22.dp)
                 )
@@ -285,9 +285,9 @@ fun CreationModeRuler(
                         Icons.Outlined.Timer
                     },
                     contentDescription = if (session.newShapesImmortal) {
-                        "No timeout — new shapes stay. Tap for normal lifetime."
+                        "No timeout — all shapes stay. Tap for normal lifetime."
                     } else {
-                        "Tap so new shapes do not time out."
+                        "Tap so no shape times out."
                     },
                     modifier = Modifier.size(22.dp)
                 )

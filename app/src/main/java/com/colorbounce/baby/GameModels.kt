@@ -30,7 +30,11 @@ data class GameShape(
      * When creation ruler hue lock is on, this shape may still animate hue while dragged.
      * Default false: follow the ruler lock for every shape until the user opts out in the shape menu.
      */
-    val exemptFromGlobalHueLock: Boolean = false
+    val exemptFromGlobalHueLock: Boolean = false,
+    /** When ruler pins all shapes, this shape stays unpinned until cleared by ruler. */
+    val exemptFromGlobalPin: Boolean = false,
+    /** When ruler makes all shapes immortal, this shape still times out until cleared by ruler. */
+    val exemptFromGlobalImmortal: Boolean = false
 )
 
 val GameShape.color: Color
