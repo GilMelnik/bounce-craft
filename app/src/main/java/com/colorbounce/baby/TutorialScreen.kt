@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
@@ -52,7 +53,6 @@ import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -625,14 +625,14 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
         body = if (menuRevealed) {
-            "Tap anywhere outside the highlighted shape and toolbar to finish."
+            "Tap anywhere outside the shape and its toolbar to finish."
         } else {
             "Double-tap the shape to open its menu."
         },
         step = 3,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
-            "Tap outside the highlighted area to finish"
+            "Tap outside the shape and toolbar to finish"
         } else {
             null
         }
@@ -708,9 +708,9 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
                                                     screenH
                                                 )
                                                 val shapeRect = tutorialShapeVisualRect(shape)
-                                                val focusRect = menuRect.unionRect(shapeRect)
-                                                    .outset(6f)
-                                                if (!focusRect.contains(p)) {
+                                                val dismissOutsideRect =
+                                                    menuRect.unionRect(shapeRect).outset(6f)
+                                                if (!dismissOutsideRect.contains(p)) {
                                                     onFinish()
                                                     change.consume()
                                                     continue
@@ -746,25 +746,59 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
             shapes.firstOrNull()?.let { shape ->
                 if (menuRevealed) {
-                    Canvas(modifier = Modifier.fillMaxSize().zIndex(0.48f)) {
-                        val menuRect = contextMenuScreenBounds(
-                            shape,
-                            menuSize,
-                            estMenuW,
-                            estMenuH,
+                    val shapeRectPx = tutorialShapeVisualRect(shape)
+                    val menuRectPx = contextMenuScreenBounds(
+                        shape,
+                        menuSize,
+                        estMenuW,
+                        estMenuH,
+                        marginPx,
+                        gapPx,
+                        screenW,
+                        screenH
+                    )
+                    val explainPadPx = with(density) { 10.dp.toPx() }
+                    val estExplainHPx = with(density) { 96.dp.toPx() }
+                    val explainColumnW = maxWidth - 8.dp
+                    val clusterBottomPx = maxOf(shapeRectPx.bottom, menuRectPx.bottom)
+                    val belowExplainTopPx = clusterBottomPx + explainPadPx
+                    val fitsBelow =
+                        belowExplainTopPx + estExplainHPx <= screenH - marginPx
+                    val sideColumnPx = with(density) { 148.dp.toPx() }
+                    val spaceLeftPx = shapeRectPx.left - marginPx - explainPadPx
+                    val spaceRightPx =
+                        screenW - marginPx - explainPadPx - shapeRectPx.right
+                    val shapeCenterYPx = (shapeRectPx.top + shapeRectPx.bottom) / 2f
+                    val sideExplainTopPx =
+                        (shapeCenterYPx - estExplainHPx / 2f).coerceIn(
                             marginPx,
-                            gapPx,
-                            screenW,
-                            screenH
+                            screenH - estExplainHPx - marginPx
                         )
-                        val shapeRect = tutorialShapeVisualRect(shape)
-                        val focusRect = menuRect.unionRect(shapeRect).outset(10f)
-                        drawRoundRect(
-                            color = scheme.primary.copy(alpha = 0.65f),
-                            topLeft = Offset(focusRect.left, focusRect.top),
-                            size = Size(focusRect.width, focusRect.height),
-                            cornerRadius = CornerRadius(12f, 12f),
-                            style = Stroke(width = 3f)
+                    val explainOffset = when {
+                        fitsBelow -> IntOffset(
+                            marginPx.roundToInt(),
+                            belowExplainTopPx.roundToInt()
+                        )
+
+                        spaceLeftPx >= sideColumnPx -> IntOffset(
+                            (shapeRectPx.left - sideColumnPx - explainPadPx)
+                                .coerceAtLeast(marginPx)
+                                .roundToInt(),
+                            sideExplainTopPx.roundToInt()
+                        )
+
+                        spaceRightPx >= sideColumnPx -> IntOffset(
+                            (shapeRectPx.right + explainPadPx)
+                                .coerceAtMost(screenW - sideColumnPx - marginPx)
+                                .roundToInt(),
+                            sideExplainTopPx.roundToInt()
+                        )
+
+                        else -> IntOffset(
+                            marginPx.roundToInt(),
+                            belowExplainTopPx
+                                .coerceAtMost(screenH - estExplainHPx - marginPx)
+                                .roundToInt()
                         )
                     }
 
@@ -802,8 +836,10 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
                     Column(
                         modifier = Modifier
-                            .align(Alignment.BottomStart)
-                            .padding(start = 4.dp, end = 4.dp, bottom = 4.dp)
+                            .align(Alignment.TopStart)
+                            .offset { explainOffset }
+                            .widthIn(max = explainColumnW)
+                            .padding(end = 4.dp)
                             .zIndex(1f),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
