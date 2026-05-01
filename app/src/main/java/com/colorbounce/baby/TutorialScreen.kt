@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.LockOpen
@@ -621,11 +620,8 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
-        body = if (menuRevealed) {
-            ""
-        } else {
-            "Double-tap the shape to open its menu."
-        },
+        // Keep non-empty so portrait header height stays fixed and the mini window does not move.
+        body = "Double-tap the shape to open its menu.",
         step = 3,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
@@ -638,7 +634,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
         } else {
             null
         },
-        belowWindowContent = if (!isLandscape && menuRevealed) {
+        belowMiniWindowContent = if (!isLandscape && menuRevealed) {
             { ShapeMenuExplainSection() }
         } else {
             null
@@ -815,7 +811,7 @@ private fun ShapeMenuExplainSection() {
         ShapeMenuExplainRow(
             icon = Icons.Outlined.Timer,
             tint = menuIconInkDim,
-            text = "Timer: may time out; tap ∞ to keep forever.",
+            text = "Timer: may time out; change to ∞ to keep forever.",
             textColor = scheme.onBackground
         )
         ShapeMenuExplainRow(
@@ -882,7 +878,7 @@ private fun TutorialStepLayout(
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
-    belowWindowContent: (@Composable () -> Unit)? = null,
+    belowMiniWindowContent: (@Composable () -> Unit)? = null,
     windowContent: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -958,6 +954,7 @@ private fun TutorialStepLayout(
                             .padding(vertical = 18.dp),
                         onOutsideTap = onOutsideTap,
                         onBoundsChanged = { tutorialWindowBounds = it },
+                        belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
                     )
                 }
@@ -1003,6 +1000,7 @@ private fun TutorialStepLayout(
                         .weight(1f)
                         .fillMaxWidth(),
                     onOutsideTap = onOutsideTap,
+                    belowMiniWindowContent = belowMiniWindowContent,
                     content = windowContent
                 )
 
@@ -1011,10 +1009,7 @@ private fun TutorialStepLayout(
                         detectTapGestures { onOutsideTap() }
                     }
                 ) {
-                    if (belowWindowContent != null) {
-                        Spacer(Modifier.height(12.dp))
-                        belowWindowContent()
-                    }
+                    // Fixed spacers so TutorialWindow's weighted height never changes when overlays appear.
                     Spacer(Modifier.height(30.dp))
                     TutorialFooter(step = step, hint = footerHint)
                     Spacer(Modifier.height(110.dp))
@@ -1029,6 +1024,7 @@ private fun TutorialWindow(
     modifier: Modifier,
     onOutsideTap: () -> Unit,
     onBoundsChanged: (Rect) -> Unit = {},
+    belowMiniWindowContent: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -1062,7 +1058,7 @@ private fun TutorialWindow(
                 }
         )
 
-        // Adaptive mini window that always fits within the available bounds
+        // Rounded play area: always centered alone so it does not shift when extra UI appears.
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -1081,6 +1077,21 @@ private fun TutorialWindow(
             // No pointerInput here on the container to avoid blocking the content's input
             content()
         }
+
+        // Drawn in a separate layer so layout never recenters the play area above.
+        if (belowMiniWindowContent != null) {
+            val explainTop = maxHeight / 2 + windowHeight / 2 + 8.dp
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset(y = explainTop)
+                    .fillMaxWidth()
+                    .padding(horizontal = outerMargin),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                belowMiniWindowContent()
+            }
+        }
     }
 }
 
@@ -1093,7 +1104,10 @@ private fun TutorialFooter(step: Int, hint: String? = null) {
             text = hint ?: "Tap outside the window to skip this part",
             style = MaterialTheme.typography.bodySmall,
             color = scheme.onBackground.copy(alpha = 0.6f),
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            minLines = 2,
+            maxLines = 2,
+            modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(12.dp))
         val dotGapPx = 18.dp
