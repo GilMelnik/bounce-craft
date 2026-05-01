@@ -48,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -79,6 +80,20 @@ import androidx.compose.runtime.saveable.rememberSaveable
 private const val TAG = "CreationMode"
 private const val EXIT_BUTTON_TAG = "exit_button"
 
+/** Matches the creation exit [Box] so ruler chrome stays clear and tappable. */
+private val CreationExitButtonInsetTop = 24.dp
+private val CreationExitButtonInsetEnd = 16.dp
+private val CreationExitButtonTapSize = 34.dp
+private val CreationExitRulerGap = 8.dp
+private val CreationExitRulerEndPadding =
+    CreationExitButtonInsetEnd + CreationExitButtonTapSize + CreationExitRulerGap
+private val CreationExitRulerTopPadding =
+    CreationExitButtonInsetTop + CreationExitButtonTapSize + CreationExitRulerGap
+
+private fun Density.creationExitTrailingInsetPx(): Float = CreationExitRulerEndPadding.toPx()
+
+private fun Density.creationExitTopClearancePx(): Float = CreationExitRulerTopPadding.toPx()
+
 /** Spectrum for the open (unlocked) hue-lock icon — reads as “color” in any theme. */
 private val rainbowLockOpenGradientColors = listOf(
     Color(0xFFFF1744),
@@ -99,11 +114,13 @@ private fun rulerRestCenter(
     h: Float,
     padPx: Float,
     halfWidthPx: Float,
-    halfHeightPx: Float
+    halfHeightPx: Float,
+    trailingInsetPx: Float = 0f,
+    topInsetPx: Float = 0f
 ): Offset {
     val u = alongFraction.coerceIn(0f, 1f)
-    val spanX = (w - 2f * padPx - 2f * halfWidthPx).coerceAtLeast(1e-3f)
-    val spanY = (h - 2f * padPx - 2f * halfHeightPx).coerceAtLeast(1e-3f)
+    val spanX = (w - 2f * padPx - 2f * halfWidthPx - trailingInsetPx).coerceAtLeast(1e-3f)
+    val spanY = (h - 2f * padPx - 2f * halfHeightPx - topInsetPx).coerceAtLeast(1e-3f)
     return when (edge) {
         RulerScreenEdge.Top ->
             Offset(padPx + halfWidthPx + u * spanX, padPx + halfHeightPx)
@@ -112,7 +129,10 @@ private fun rulerRestCenter(
         RulerScreenEdge.Start ->
             Offset(padPx + halfWidthPx, padPx + halfHeightPx + u * spanY)
         RulerScreenEdge.End ->
-            Offset(w - padPx - halfWidthPx, padPx + halfHeightPx + u * spanY)
+            Offset(
+                w - padPx - halfWidthPx,
+                padPx + halfHeightPx + topInsetPx + u * spanY
+            )
     }
 }
 
@@ -123,15 +143,17 @@ private fun rulerProjectAlong(
     h: Float,
     padPx: Float,
     halfWidthPx: Float,
-    halfHeightPx: Float
+    halfHeightPx: Float,
+    trailingInsetPx: Float = 0f,
+    topInsetPx: Float = 0f
 ): Float {
-    val spanX = (w - 2f * padPx - 2f * halfWidthPx).coerceAtLeast(1e-3f)
-    val spanY = (h - 2f * padPx - 2f * halfHeightPx).coerceAtLeast(1e-3f)
+    val spanX = (w - 2f * padPx - 2f * halfWidthPx - trailingInsetPx).coerceAtLeast(1e-3f)
+    val spanY = (h - 2f * padPx - 2f * halfHeightPx - topInsetPx).coerceAtLeast(1e-3f)
     return when (edge) {
         RulerScreenEdge.Top, RulerScreenEdge.Bottom ->
             ((p.x - padPx - halfWidthPx) / spanX).coerceIn(0f, 1f)
         RulerScreenEdge.Start, RulerScreenEdge.End ->
-            ((p.y - padPx - halfHeightPx) / spanY).coerceIn(0f, 1f)
+            ((p.y - padPx - halfHeightPx - topInsetPx) / spanY).coerceIn(0f, 1f)
     }
 }
 
@@ -383,6 +405,12 @@ fun CreationModeScreen(
                 }
                 val fullW = if (measuredPw > 0f) measuredPw else halfW * 2f
                 val fullH = if (measuredPh > 0f) measuredPh else halfH * 2f
+                val exitTrailingInsetPxTop = with(density) { creationExitTrailingInsetPx() }
+                val exitTopInsetPxEnd = with(density) { creationExitTopClearancePx() }
+                val exitTrailingInsetPx =
+                    if (rulerScreenEdge == RulerScreenEdge.Top) exitTrailingInsetPxTop else 0f
+                val exitTopInsetPx =
+                    if (rulerScreenEdge == RulerScreenEdge.End) exitTopInsetPxEnd else 0f
                 val centerPanel = rulerRestCenter(
                     rulerScreenEdge,
                     along,
@@ -390,7 +418,9 @@ fun CreationModeScreen(
                     hPx,
                     padPx,
                     halfW,
-                    halfH
+                    halfH,
+                    trailingInsetPx = exitTrailingInsetPx,
+                    topInsetPx = exitTopInsetPx
                 )
                 val maxXt = (wPx - fullW).roundToInt().coerceAtLeast(0)
                 val maxYt = (hPx - fullH).roundToInt().coerceAtLeast(0)
@@ -406,10 +436,18 @@ fun CreationModeScreen(
                             .padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
                     RulerScreenEdge.End ->
                         Modifier.statusBarsPadding()
-                            .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
+                            .padding(
+                                end = 4.dp,
+                                top = CreationExitRulerTopPadding,
+                                bottom = 4.dp
+                            )
                 }
-                val surfaceWidthMod =
-                    if (isSide) Modifier.width(272.dp) else Modifier.fillMaxWidth()
+                val surfaceWidthMod = when {
+                    isSide -> Modifier.width(272.dp)
+                    rulerScreenEdge == RulerScreenEdge.Top ->
+                        Modifier.fillMaxWidth().padding(end = CreationExitRulerEndPadding)
+                    else -> Modifier.fillMaxWidth()
+                }
                 val showExpandedChrome = rulerExpanded || collapsingExpandedDragInProgress
                 val rulerExpandedState = rememberUpdatedState(rulerExpanded)
 
@@ -459,7 +497,9 @@ fun CreationModeScreen(
                             hPx,
                             padPx,
                             halfB,
-                            halfB
+                            halfB,
+                            trailingInsetPx = exitTrailingInsetPx,
+                            topInsetPx = exitTopInsetPx
                         ) + rulerMinimizedDragVisual
                     val maxXB = (wPx - 2f * halfB).roundToInt().coerceAtLeast(0)
                     val maxYB = (hPx - 2f * halfB).roundToInt().coerceAtLeast(0)
@@ -517,7 +557,9 @@ fun CreationModeScreen(
                                 padPx,
                                 halfW,
                                 halfH,
-                                halfB
+                                halfB,
+                                exitTrailingInsetPx,
+                                exitTopInsetPx
                             ) {
                                 val touchSlopPx = viewConfiguration.touchSlop
                                 awaitEachGesture {
@@ -553,7 +595,9 @@ fun CreationModeScreen(
                                                                 hPx,
                                                                 padPx,
                                                                 halfW,
-                                                                halfH
+                                                                halfH,
+                                                                trailingInsetPx = exitTrailingInsetPx,
+                                                                topInsetPx = exitTopInsetPx
                                                             ) + accumulatedPanelDrag
                                                         rulerMinimizedDragVisual =
                                                             fingerWorld -
@@ -564,7 +608,9 @@ fun CreationModeScreen(
                                                                     hPx,
                                                                     padPx,
                                                                     halfB,
-                                                                    halfB
+                                                                    halfB,
+                                                                    trailingInsetPx = exitTrailingInsetPx,
+                                                                    topInsetPx = exitTopInsetPx
                                                                 )
                                                     }
                                                 } else {
@@ -587,10 +633,16 @@ fun CreationModeScreen(
                                                         hPx,
                                                         padPx,
                                                         halfB,
-                                                        halfB
+                                                        halfB,
+                                                        trailingInsetPx = exitTrailingInsetPx,
+                                                        topInsetPx = exitTopInsetPx
                                                     ) + rulerMinimizedDragVisual
                                                 val e2 = rulerNearestEdge(p, wPx, hPx)
                                                 rulerEdgeName = e2.name
+                                                val projectTrailing =
+                                                    if (e2 == RulerScreenEdge.Top) exitTrailingInsetPxTop else 0f
+                                                val projectTop =
+                                                    if (e2 == RulerScreenEdge.End) exitTopInsetPxEnd else 0f
                                                 rulerAlongFraction =
                                                     rulerProjectAlong(
                                                         p,
@@ -599,7 +651,9 @@ fun CreationModeScreen(
                                                         hPx,
                                                         padPx,
                                                         halfB,
-                                                        halfB
+                                                        halfB,
+                                                        trailingInsetPx = projectTrailing,
+                                                        topInsetPx = projectTop
                                                     )
                                                 collapsingExpandedDragInProgress = false
                                                 rulerMinimizedDragVisual = Offset.Zero
@@ -992,7 +1046,23 @@ private fun CreationRulerMinimizedControl(
         val h = with(density) { maxHeight.toPx() }
         val expandMaxDragPx = with(density) { RulerMinimizedExpandMaxDrag.toPx() }
         val along = alongFraction.coerceIn(0f, 1f)
-        val c = rulerRestCenter(rulerScreenEdge, along, w, h, pad, halfB, halfB) + drag
+        val exitTrailingInsetPxTop = with(density) { creationExitTrailingInsetPx() }
+        val exitTopInsetPxEnd = with(density) { creationExitTopClearancePx() }
+        val trailingInsetPx =
+            if (rulerScreenEdge == RulerScreenEdge.Top) exitTrailingInsetPxTop else 0f
+        val topInsetPx =
+            if (rulerScreenEdge == RulerScreenEdge.End) exitTopInsetPxEnd else 0f
+        val c = rulerRestCenter(
+            rulerScreenEdge,
+            along,
+            w,
+            h,
+            pad,
+            halfB,
+            halfB,
+            trailingInsetPx = trailingInsetPx,
+            topInsetPx = topInsetPx
+        ) + drag
         val maxX = (w - 2f * halfB).roundToInt().coerceAtLeast(0)
         val maxY = (h - 2f * halfB).roundToInt().coerceAtLeast(0)
         val tlX = (c.x - halfB).roundToInt().coerceIn(0, maxX)
@@ -1009,7 +1079,17 @@ private fun CreationRulerMinimizedControl(
                     transformOrigin = TransformOrigin(0.5f, 0.5f)
                 }
                 .semantics { contentDescription = "Ruler" }
-                .pointerInput(rulerScreenEdge, w, h, along, expandMaxDragPx) {
+                .pointerInput(
+                    rulerScreenEdge,
+                    w,
+                    h,
+                    along,
+                    expandMaxDragPx,
+                    trailingInsetPx,
+                    topInsetPx,
+                    exitTrailingInsetPxTop,
+                    exitTopInsetPxEnd
+                ) {
                     // detectDragGestures only invokes onDragEnd after touch slop, so a plain tap never
                     // expanded the ruler. Track slop explicitly and treat short drags as expand.
                     val touchSlopPx = viewConfiguration.touchSlop
@@ -1044,12 +1124,28 @@ private fun CreationRulerMinimizedControl(
                                         h,
                                         pad,
                                         halfB,
-                                        halfB
+                                        halfB,
+                                        trailingInsetPx = trailingInsetPx,
+                                        topInsetPx = topInsetPx
                                     ) + finalDrag
                                     val e2 = rulerNearestEdge(p, w, h)
+                                    val projectTrailing =
+                                        if (e2 == RulerScreenEdge.Top) exitTrailingInsetPxTop else 0f
+                                    val projectTop =
+                                        if (e2 == RulerScreenEdge.End) exitTopInsetPxEnd else 0f
                                     onPlacementChange(
                                         e2,
-                                        rulerProjectAlong(p, e2, w, h, pad, halfB, halfB)
+                                        rulerProjectAlong(
+                                            p,
+                                            e2,
+                                            w,
+                                            h,
+                                            pad,
+                                            halfB,
+                                            halfB,
+                                            trailingInsetPx = projectTrailing,
+                                            topInsetPx = projectTop
+                                        )
                                     )
                                 }
                                 drag = Offset.Zero
