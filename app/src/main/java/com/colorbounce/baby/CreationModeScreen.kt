@@ -58,6 +58,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -776,26 +777,28 @@ private fun CreationRulerMinimizedControl(
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var crossedSlop = false
+                        var accumulatedDrag = Offset.Zero
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.find { it.id == down.id } ?: continue
                             if (change.pressed) {
-                                val total = change.position - down.position
-                                if (!crossedSlop && total.getDistance() >= touchSlopPx) {
+                                val fromDown = change.position - down.position
+                                if (!crossedSlop && fromDown.getDistance() >= touchSlopPx) {
                                     crossedSlop = true
                                 }
                                 if (crossedSlop) {
-                                    drag = total
+                                    accumulatedDrag += change.positionChange()
+                                    drag = accumulatedDrag
                                 }
                             }
                             if (!change.pressed && change.previousPressed) {
                                 change.consume()
-                                val total =
-                                    if (crossedSlop) change.position - down.position else Offset.Zero
-                                if (!crossedSlop || total.getDistance() < expandMaxDragPx) {
+                                val finalDrag =
+                                    if (crossedSlop) accumulatedDrag else Offset.Zero
+                                if (!crossedSlop || finalDrag.getDistance() < expandMaxDragPx) {
                                     onExpand()
                                 } else {
-                                    val p = restCenter(rulerScreenEdge, along) + total
+                                    val p = restCenter(rulerScreenEdge, along) + finalDrag
                                     val e2 = nearestEdge(p)
                                     onPlacementChange(e2, projectAlong(p, e2))
                                 }
