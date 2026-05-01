@@ -977,6 +977,7 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
+    val onSurfaceVariant = scheme.onSurfaceVariant
     val scroll = rememberScrollState()
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
 
@@ -1003,16 +1004,38 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                     .padding(top = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Spacer(Modifier.width(8.dp))
                 Text(
-                    "Settings",
+                    text = "Settings",
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onBackground
                 )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(
+                            scheme.surfaceVariant.copy(alpha = 0.8f),
+                            CircleShape
+                        )
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(Modifier.size(20.dp)) {
+                        drawLine(
+                            color = onSurfaceVariant,
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 4f
+                        )
+                        drawLine(
+                            color = onSurfaceVariant,
+                            start = Offset(size.width, 0f),
+                            end = Offset(0f, size.height),
+                            strokeWidth = 4f
+                        )
+                    }
+                }
             }
 
             SettingsSectionLabel("Theme mode")
