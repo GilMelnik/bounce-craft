@@ -854,18 +854,7 @@ class GameViewModel : ViewModel() {
             ShapeType.TRIANGLE -> {
                 abs(dx) <= halfWidth && dy <= halfHeight && dy >= -halfHeight / 2f
             }
-            ShapeType.ARCH -> {
-                val cx = shape.x
-                val cy = shape.y + shape.width / 2f
-                val rMid = shape.width / 2f
-                val stroke = archStrokeWidth(shape)
-                val vx = point.x - cx
-                val vy = point.y - cy
-                val len = hypot(vx, vy)
-                len >= 1e-4f &&
-                    abs(len - rMid) <= stroke / 2f &&
-                    cy + rMid * (vy / len) <= cy + 1f
-            }
+            ShapeType.ARCH -> pointInArchStroke(point.x, point.y, shape)
         }
     }
 
