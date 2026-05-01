@@ -151,7 +151,10 @@ private fun CreateShapeTutorialStep(onAdvance: () -> Unit) {
                 .onSizeChanged { canvasSize = it }
                 .pointerInput(targetArea, stageCompleted) {
                     detectTapGestures { tapOffset ->
-                        if (stageCompleted) return@detectTapGestures
+                        if (stageCompleted) {
+                            onAdvance()
+                            return@detectTapGestures
+                        }
                         if (targetArea.contains(tapOffset)) {
                             if (shapes.isEmpty()) {
                                 val pointerId = 1001L
@@ -248,81 +251,93 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
         step = 1,
         onOutsideTap = onAdvance
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { sceneSize = it }
-                .pointerInput(settings, stageCompleted, shapes.size) {
-                    awaitPointerEventScope {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            event.changes.forEach { change ->
-                                val pointerId = change.id.value + 2_000L
-                                when {
-                                    change.pressed && !change.previousPressed -> {
-                                        if (!stageCompleted && shapes.isEmpty()) {
-                                            viewModel.startInteraction(
-                                                point = change.position,
-                                                settings = settings,
-                                                pointerId = pointerId,
-                                                constrainInsideScreen = true
-                                            )
-                                            change.consume()
-                                        }
-                                    }
-
-                                    change.pressed && change.previousPressed -> {
-                                        if (!stageCompleted) {
-                                            val dragAmount = change.position - change.previousPosition
-                                            viewModel.onDrag(
-                                                point = change.position,
-                                                dragAmount = dragAmount,
-                                                settings = settings,
-                                                pointerId = pointerId,
-                                                constrainInsideScreen = true
-                                            )
-                                            change.consume()
-                                        }
-                                    }
-
-                                    !change.pressed && change.previousPressed -> {
-                                        if (!stageCompleted && shapes.isNotEmpty()) {
-                                            val shapeId = shapes.lastOrNull()?.id
-                                            if (shapeId != null) {
-                                                releasedShapeId = shapeId
-                                                releasePoint = change.position
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { sceneSize = it }
+                    .pointerInput(settings, stageCompleted, shapes.size) {
+                        awaitPointerEventScope {
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                event.changes.forEach { change ->
+                                    val pointerId = change.id.value + 2_000L
+                                    when {
+                                        change.pressed && !change.previousPressed -> {
+                                            if (!stageCompleted && shapes.isEmpty()) {
+                                                viewModel.startInteraction(
+                                                    point = change.position,
+                                                    settings = settings,
+                                                    pointerId = pointerId,
+                                                    constrainInsideScreen = true
+                                                )
+                                                change.consume()
                                             }
-                                            viewModel.endInteraction(settings, pointerId)
-                                            change.consume()
+                                        }
+
+                                        change.pressed && change.previousPressed -> {
+                                            if (!stageCompleted) {
+                                                val dragAmount =
+                                                    change.position - change.previousPosition
+                                                viewModel.onDrag(
+                                                    point = change.position,
+                                                    dragAmount = dragAmount,
+                                                    settings = settings,
+                                                    pointerId = pointerId,
+                                                    constrainInsideScreen = true
+                                                )
+                                                change.consume()
+                                            }
+                                        }
+
+                                        !change.pressed && change.previousPressed -> {
+                                            if (!stageCompleted && shapes.isNotEmpty()) {
+                                                val shapeId = shapes.lastOrNull()?.id
+                                                if (shapeId != null) {
+                                                    releasedShapeId = shapeId
+                                                    releasePoint = change.position
+                                                }
+                                                viewModel.endInteraction(settings, pointerId)
+                                                change.consume()
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     }
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawTutorialShapes(shapes)
                 }
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawTutorialShapes(shapes)
-            }
 
-            if (!stageCompleted && shapes.isEmpty()) {
-                HandHint(
-                    modifier = Modifier.fillMaxSize(),
-                    progress = handProgress,
-                    gesture = TutorialGesture.FORM_DRAG,
-                    anchor = Offset.Unspecified
+                if (!stageCompleted && shapes.isEmpty()) {
+                    HandHint(
+                        modifier = Modifier.fillMaxSize(),
+                        progress = handProgress,
+                        gesture = TutorialGesture.FORM_DRAG,
+                        anchor = Offset.Unspecified
+                    )
+                }
+
+                Text(
+                    text = if (stageCompleted) "" else "Drag then release to see trajectory",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            Text(
-                text = if (stageCompleted) "" else "Drag then release to see trajectory",
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (stageCompleted) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(stageCompleted) {
+                            detectTapGestures { onAdvance() }
+                        }
+                )
+            }
         }
     }
 }
@@ -340,9 +355,11 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
     var movedEnough by remember { mutableStateOf(false) }
     var colorShifted by remember { mutableStateOf(false) }
     var stageCompleted by remember { mutableStateOf(false) }
+    var userGrabbedShape by remember { mutableStateOf(false) }
 
     val latestShapes by rememberUpdatedState(shapes)
     val latestStageCompleted by rememberUpdatedState(stageCompleted)
+    val latestUserGrabbedShape by rememberUpdatedState(userGrabbedShape)
 
     val infinite = rememberInfiniteTransition(label = "tutorial_move_shape")
     val handProgress by infinite.animateFloat(
@@ -360,7 +377,6 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
             viewModel.setScreenSize(playgroundSize.width.toFloat(), playgroundSize.height.toFloat())
             if (shapes.isEmpty()) {
                 val start = Offset(playgroundSize.width * 0.5f, playgroundSize.height * 0.5f)
-                initialCenter = start
                 val pointerId = 3001L
                 viewModel.startInteraction(
                     point = start,
@@ -368,7 +384,19 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                     pointerId = pointerId,
                     constrainInsideScreen = true
                 )
-                viewModel.endInteraction(settings, pointerId)
+                val dragOut = 150f
+                val targetPoint = Offset(start.x + dragOut, start.y)
+                viewModel.onDrag(
+                    point = targetPoint,
+                    dragAmount = targetPoint - start,
+                    settings = settings,
+                    pointerId = pointerId,
+                    resizeOnDrag = true,
+                    constrainInsideScreen = true
+                )
+                viewModel.endInteraction(settings, pointerId, applyLaunchVelocity = false)
+                val placed = viewModel.shapes.value.firstOrNull()
+                initialCenter = placed?.let { Offset(it.x, it.y) } ?: start
             }
         }
     }
@@ -413,11 +441,14 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
         step = 2,
         onOutsideTap = onFinish
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { playgroundSize = it }
-                .pointerInput(playgroundSize, settings) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { playgroundSize = it }
+                    // Stable keys: never restart this block on grab — that would cancel mid-drag while the
+                    // ViewModel still marks the shape held (hue cycles, position frozen).
+                    .pointerInput(Unit) {
                     awaitPointerEventScope {
                         var activePointerId: Long? = null
                         while (true) {
@@ -427,13 +458,13 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                                 when {
                                     change.pressed && !change.previousPressed -> {
                                         if (!latestStageCompleted && activePointerId == null) {
-                                            // Only allow interaction if we hit the existing shape
                                             val hit = latestShapes.find { shape ->
                                                 val dx = change.position.x - shape.x
                                                 val dy = change.position.y - shape.y
                                                 hypot(dx, dy) < (shape.width / 2f) * 1.6f
                                             }
                                             if (hit != null) {
+                                                userGrabbedShape = true
                                                 viewModel.startInteraction(
                                                     point = change.position,
                                                     settings = settings,
@@ -441,6 +472,9 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                                                     constrainInsideScreen = true
                                                 )
                                                 activePointerId = pointerId
+                                                change.consume()
+                                            } else if (latestUserGrabbedShape) {
+                                                onFinish()
                                                 change.consume()
                                             }
                                         }
@@ -473,28 +507,39 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                         }
                     }
                 }
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawTutorialShapes(shapes)
-            }
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawTutorialShapes(shapes)
+                }
 
-            if (!stageCompleted) {
-                HandHint(
-                    modifier = Modifier.fillMaxSize(),
-                    progress = handProgress,
-                    gesture = TutorialGesture.MOVE,
-                    anchor = shapes.firstOrNull()?.let { Offset(it.x, it.y) } ?: Offset.Unspecified
+                if (!stageCompleted) {
+                    HandHint(
+                        modifier = Modifier.fillMaxSize(),
+                        progress = handProgress,
+                        gesture = TutorialGesture.MOVE,
+                        anchor = shapes.firstOrNull()?.let { Offset(it.x, it.y) }
+                            ?: Offset.Unspecified
+                    )
+                }
+
+                Text(
+                    text = "Hold and move to cycle colors",
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 12.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-
-            Text(
-                text = "Hold and move to cycle colors",
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 12.dp),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (stageCompleted) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(stageCompleted) {
+                            detectTapGestures { onFinish() }
+                        }
+                )
+            }
         }
     }
 }
@@ -577,24 +622,30 @@ private fun TutorialStepLayout(
                 }
                 Spacer(Modifier.height(20.dp))
             } else {
-                Spacer(Modifier.height(130.dp))
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = scheme.primary,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = body,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = scheme.onBackground,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Spacer(Modifier.height(40.dp))
+                Column(
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures { onOutsideTap() }
+                    }
+                ) {
+                    Spacer(Modifier.height(130.dp))
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = scheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = body,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = scheme.onBackground,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(40.dp))
+                }
 
                 TutorialWindow(
                     modifier = Modifier
@@ -604,12 +655,15 @@ private fun TutorialStepLayout(
                     content = windowContent
                 )
 
-                Spacer(Modifier.height(30.dp))
-            }
-
-            if (!isLandscape) {
-                TutorialFooter(step = step)
-                Spacer(Modifier.height(110.dp))
+                Column(
+                    modifier = Modifier.pointerInput(Unit) {
+                        detectTapGestures { onOutsideTap() }
+                    }
+                ) {
+                    Spacer(Modifier.height(30.dp))
+                    TutorialFooter(step = step)
+                    Spacer(Modifier.height(110.dp))
+                }
             }
         }
     }
