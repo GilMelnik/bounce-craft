@@ -192,6 +192,7 @@ fun CreationModeScreen(
                                             val hit = viewModel.shapeAt(change.position)
                                             if (hit != null && doubleTap.isSecondTapOnShape(hit.id)) {
                                                 contextMenuShapeId = hit.id
+                                                viewModel.resetShapeLifetimeTimer(hit.id)
                                                 downPos[pid] = change.position
                                                 continue@eventLoop
                                             }

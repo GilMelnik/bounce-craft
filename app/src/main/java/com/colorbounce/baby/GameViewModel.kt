@@ -227,7 +227,7 @@ class GameViewModel : ViewModel() {
                 activeShapes[pointerId] = hit.id
                 startPoints[pointerId] = point
                 lastDragDeltas[pointerId] = Offset.Zero
-                updateInteractionTime(hit.id)
+                resetShapeLifetimeTimer(hit.id)
                 return
             }
 
@@ -382,7 +382,13 @@ class GameViewModel : ViewModel() {
                 return
             }
             if (dragDelta == Offset.Zero) {
-                Log.w(TAG, "No drag delta found for pointerId=$pointerId")
+                _shapes.value = _shapes.value.map {
+                    if (it.id == shapeId) {
+                        it.copy(lastInteractionMillis = currentGameTimeMillis())
+                    } else {
+                        it
+                    }
+                }
                 cleanupPointer(pointerId)
                 return
             }
@@ -793,7 +799,8 @@ class GameViewModel : ViewModel() {
         _shapes.value = _shapes.value.takeLast(maxShapes.coerceAtLeast(1))
     }
 
-    private fun updateInteractionTime(id: Long) {
+    /** Refreshes per-shape timeout ([GameShape.lastInteractionMillis]), e.g. after interaction or selection. */
+    fun resetShapeLifetimeTimer(id: Long) {
         val now = currentGameTimeMillis()
         _shapes.value = _shapes.value.map {
             if (it.id == id) {
