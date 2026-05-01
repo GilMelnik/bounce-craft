@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,10 +20,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AllInclusive
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -39,22 +48,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlin.math.PI
@@ -63,9 +81,10 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.min
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val STEP_COUNT = 3
+private const val STEP_COUNT = 4
 private const val SUCCESS_ADVANCE_DELAY_MS = 4000L
 private const val FORMATION_ADVANCE_DELAY_MS = 4500L
 
@@ -84,7 +103,8 @@ fun TutorialScreen(onDismiss: () -> Unit) {
     when (currentStep) {
         0 -> CreateShapeTutorialStep(onAdvance = ::nextStep)
         1 -> SizeAndSpeedTutorialStep(onAdvance = ::nextStep)
-        else -> MoveShapeTutorialStep(onFinish = onDismiss)
+        2 -> MoveShapeTutorialStep(onAdvance = ::nextStep)
+        else -> SelectShapeTutorialStep(onFinish = ::nextStep)
     }
 }
 
@@ -343,7 +363,7 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
 }
 
 @Composable
-private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
+private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
     val settings = remember { tutorialSettings(maxVelocity = 1800) }
     val viewModel = remember { GameViewModel() }
     val shapes by viewModel.shapes.collectAsState(emptyList())
@@ -406,7 +426,7 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
     LaunchedEffect(stageCompleted) {
         if (stageCompleted) {
             delay(SUCCESS_ADVANCE_DELAY_MS)
-            onFinish()
+            onAdvance()
         }
     }
 
@@ -439,7 +459,7 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
         title = "Part 3 - Move and color change",
         body = "Drag the shape to move it. Notice how its color cycles while you hold it!",
         step = 2,
-        onOutsideTap = onFinish
+        onOutsideTap = onAdvance
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -474,7 +494,7 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                                                 activePointerId = pointerId
                                                 change.consume()
                                             } else if (latestUserGrabbedShape) {
-                                                onFinish()
+                                                onAdvance()
                                                 change.consume()
                                             }
                                         }
@@ -536,11 +556,328 @@ private fun MoveShapeTutorialStep(onFinish: () -> Unit) {
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(stageCompleted) {
-                            detectTapGestures { onFinish() }
+                            detectTapGestures { onAdvance() }
                         }
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
+    val settings = remember { tutorialSettings(maxVelocity = 1800) }
+    val viewModel = remember { GameViewModel() }
+    val shapes by viewModel.shapes.collectAsState(emptyList())
+
+    var playgroundSize by remember { mutableStateOf(IntSize.Zero) }
+    var menuRevealed by rememberSaveable { mutableStateOf(false) }
+    var menuSize by remember { mutableStateOf(IntSize.Zero) }
+
+    val doubleTap = remember { DoubleTapState() }
+    val slopPx = with(LocalDensity.current) { 20.dp.toPx() }
+
+    val latestMenuRevealed by rememberUpdatedState(menuRevealed)
+    val latestShapes by rememberUpdatedState(shapes)
+
+    val infiniteDoubleTap = rememberInfiniteTransition(label = "tutorial_double_tap_shape_menu")
+    val doubleTapHandProgress by infiniteDoubleTap.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(900, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "double_tap_hint"
+    )
+
+    LaunchedEffect(playgroundSize) {
+        if (playgroundSize.width > 0 && playgroundSize.height > 0) {
+            viewModel.setScreenSize(playgroundSize.width.toFloat(), playgroundSize.height.toFloat())
+            if (shapes.isEmpty()) {
+                val start = Offset(playgroundSize.width * 0.5f, playgroundSize.height * 0.42f)
+                val pointerId = 5001L
+                viewModel.startInteraction(
+                    point = start,
+                    settings = settings,
+                    pointerId = pointerId,
+                    constrainInsideScreen = true
+                )
+                val dragOut = 150f
+                val targetPoint = Offset(start.x + dragOut, start.y)
+                viewModel.onDrag(
+                    point = targetPoint,
+                    dragAmount = targetPoint - start,
+                    settings = settings,
+                    pointerId = pointerId,
+                    resizeOnDrag = true,
+                    constrainInsideScreen = true
+                )
+                viewModel.endInteraction(settings, pointerId, applyLaunchVelocity = false)
+            }
+        }
+    }
+
+    if (!menuRevealed) {
+        TutorialPhysicsLoop(viewModel = viewModel, settings = settings)
+    }
+
+    TutorialStepLayout(
+        title = "Part 4 - Shape menu",
+        body = if (menuRevealed) {
+            "Tap anywhere outside the highlighted shape and toolbar to finish."
+        } else {
+            "Double-tap the shape to open its menu."
+        },
+        step = 3,
+        onOutsideTap = onFinish,
+        footerHint = if (menuRevealed) {
+            "Tap outside the highlighted area to finish"
+        } else {
+            null
+        }
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxSize()
+                .onSizeChanged { playgroundSize = it }
+        ) {
+            val density = LocalDensity.current
+            val scheme = MaterialTheme.colorScheme
+            val marginPx = with(density) { 8.dp.toPx() }
+            val gapPx = with(density) { 10.dp.toPx() }
+            val estMenuW = with(density) { 220.dp.toPx() }
+            val estMenuH = with(density) { 56.dp.toPx() }
+            val screenW = with(density) { maxWidth.toPx() }
+            val screenH = with(density) { maxHeight.toPx() }
+
+            val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
+            val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
+            val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
+
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                drawTutorialShapes(shapes)
+            }
+
+            val shapeForHint = shapes.firstOrNull()
+            if (!menuRevealed && shapeForHint != null) {
+                HandHint(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .zIndex(0.4f),
+                    progress = doubleTapHandProgress,
+                    gesture = TutorialGesture.DOUBLE_TAP,
+                    anchor = Offset(shapeForHint.x, shapeForHint.y)
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .zIndex(0.5f)
+                    .pointerInput(menuRevealed, menuSize, playgroundSize, shapes) {
+                        awaitPointerEventScope {
+                            val downPos = mutableMapOf<Long, Offset>()
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                for (change in event.changes) {
+                                    val pid = change.id.value + 6_000L
+                                    when {
+                                        change.pressed && !change.previousPressed -> {
+                                            val p = change.position
+                                            val shape = latestShapes.firstOrNull()
+                                            if (!latestMenuRevealed && shape != null) {
+                                                val hit = viewModel.shapeAt(p)
+                                                if (hit != null &&
+                                                    doubleTap.isSecondTapOnShape(hit.id)
+                                                ) {
+                                                    menuRevealed = true
+                                                    change.consume()
+                                                    continue
+                                                }
+                                            }
+                                            if (latestMenuRevealed && shape != null) {
+                                                val menuRect = contextMenuScreenBounds(
+                                                    shape,
+                                                    menuSize,
+                                                    estMenuW,
+                                                    estMenuH,
+                                                    marginPx,
+                                                    gapPx,
+                                                    screenW,
+                                                    screenH
+                                                )
+                                                val shapeRect = tutorialShapeVisualRect(shape)
+                                                val focusRect = menuRect.unionRect(shapeRect)
+                                                    .outset(6f)
+                                                if (!focusRect.contains(p)) {
+                                                    onFinish()
+                                                    change.consume()
+                                                    continue
+                                                }
+                                            }
+                                            downPos[pid] = p
+                                        }
+
+                                        change.pressed && change.previousPressed -> {
+                                            // No drag handling needed on this step.
+                                        }
+
+                                        !change.pressed && change.previousPressed -> {
+                                            val start = downPos.remove(pid) ?: continue
+                                            val moved =
+                                                (change.position - start).getDistance() > slopPx
+                                            val shape = latestShapes.firstOrNull()
+                                            if (!latestMenuRevealed && shape != null && !moved) {
+                                                val hit = viewModel.shapeAt(change.position)
+                                                if (hit != null) {
+                                                    doubleTap.recordShapeTap(hit.id)
+                                                } else {
+                                                    doubleTap.clear()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+            )
+
+            shapes.firstOrNull()?.let { shape ->
+                if (menuRevealed) {
+                    Canvas(modifier = Modifier.fillMaxSize().zIndex(0.48f)) {
+                        val menuRect = contextMenuScreenBounds(
+                            shape,
+                            menuSize,
+                            estMenuW,
+                            estMenuH,
+                            marginPx,
+                            gapPx,
+                            screenW,
+                            screenH
+                        )
+                        val shapeRect = tutorialShapeVisualRect(shape)
+                        val focusRect = menuRect.unionRect(shapeRect).outset(10f)
+                        drawRoundRect(
+                            color = scheme.primary.copy(alpha = 0.65f),
+                            topLeft = Offset(focusRect.left, focusRect.top),
+                            size = Size(focusRect.width, focusRect.height),
+                            cornerRadius = CornerRadius(12f, 12f),
+                            style = Stroke(width = 3f)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset {
+                                val menuW =
+                                    if (menuSize.width > 0) menuSize.width.toFloat() else estMenuW
+                                val menuH =
+                                    if (menuSize.height > 0) menuSize.height.toFloat() else estMenuH
+                                var x = shape.x - menuW / 2f
+                                var y = shape.y + shape.height / 2f + gapPx
+                                if (y + menuH > screenH - marginPx) {
+                                    y = shape.y - shape.height / 2f - gapPx - menuH
+                                }
+                                x = x.coerceIn(marginPx, screenW - menuW - marginPx)
+                                y = y.coerceIn(marginPx, screenH - menuH - marginPx)
+                                IntOffset(x.roundToInt(), y.roundToInt())
+                            }
+                            .onSizeChanged { menuSize = it }
+                            .zIndex(1f)
+                    ) {
+                        ShapeContextMenuBar(
+                            shape = shape,
+                            menuIconInk = menuIconInk,
+                            menuIconInkDim = menuIconInkDim,
+                            onDelete = {},
+                            onTogglePin = {},
+                            onToggleImmortal = {},
+                            onToggleFreezeHueWhileDragging = {},
+                            rulerHueGloballyLocked = false
+                        )
+                    }
+
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(start = 4.dp, end = 4.dp, bottom = 4.dp)
+                            .zIndex(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ShapeMenuExplainRow(
+                            icon = Icons.Filled.Delete,
+                            tint = menuIconInk,
+                            text = "Delete this shape."
+                        )
+                        ShapeMenuExplainRow(
+                            icon = Icons.Filled.PushPin,
+                            tint = menuIconInkDim,
+                            text = "Pin: stays still until you drag it."
+                        )
+                        ShapeMenuExplainRow(
+                            icon = Icons.Outlined.Timer,
+                            tint = menuIconInkDim,
+                            text = "Timer: may time out; tap ∞ to keep forever."
+                        )
+                        ShapeMenuExplainRow(
+                            icon = Icons.Outlined.LockOpen,
+                            tint = Color.White,
+                            rainbowGradient = true,
+                            text = "Hue lock off: color shifts while dragging."
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShapeMenuExplainRow(
+    icon: ImageVector,
+    tint: Color,
+    text: String,
+    rainbowGradient: Boolean = false
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (rainbowGradient) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .size(22.dp)
+                    .drawWithCache {
+                        val brush = Brush.linearGradient(
+                            colors = rainbowLockOpenGradientColors,
+                            start = Offset.Zero,
+                            end = Offset(size.width, size.height)
+                        )
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(brush = brush, blendMode = BlendMode.SrcIn)
+                        }
+                    }
+            )
+        } else {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = scheme.onSurface,
+            maxLines = 2
+        )
     }
 }
 
@@ -550,6 +887,7 @@ private fun TutorialStepLayout(
     body: String,
     step: Int,
     onOutsideTap: () -> Unit,
+    footerHint: String? = null,
     windowContent: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -605,7 +943,7 @@ private fun TutorialStepLayout(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(20.dp))
-                        TutorialFooter(step = step)
+                        TutorialFooter(step = step, hint = footerHint)
                     }
 
                     Spacer(Modifier.width(24.dp))
@@ -661,7 +999,7 @@ private fun TutorialStepLayout(
                     }
                 ) {
                     Spacer(Modifier.height(30.dp))
-                    TutorialFooter(step = step)
+                    TutorialFooter(step = step, hint = footerHint)
                     Spacer(Modifier.height(110.dp))
                 }
             }
@@ -730,20 +1068,22 @@ private fun TutorialWindow(
 }
 
 @Composable
-private fun TutorialFooter(step: Int) {
+private fun TutorialFooter(step: Int, hint: String? = null) {
     val scheme = MaterialTheme.colorScheme
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "Tap outside the window to skip this part",
+            text = hint ?: "Tap outside the window to skip this part",
             style = MaterialTheme.typography.bodySmall,
             color = scheme.onBackground.copy(alpha = 0.6f),
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
-        Canvas(modifier = Modifier.size(width = 56.dp, height = 10.dp)) {
+        val dotGapPx = 18.dp
+        val indicatorWidth = dotGapPx * (STEP_COUNT - 1) + 12.dp * 2
+        Canvas(modifier = Modifier.size(width = indicatorWidth, height = 10.dp)) {
             val radius = 5.dp.toPx()
-            val gap = 18.dp.toPx()
+            val gap = dotGapPx.toPx()
             repeat(STEP_COUNT) { index ->
                 val x = radius + index * gap
                 drawCircle(
@@ -787,6 +1127,31 @@ private fun hueDistance(a: Float, b: Float): Float {
     val diff = abs(a.normalizeHue() - b.normalizeHue())
     return min(diff, 360f - diff)
 }
+
+private fun tutorialShapeVisualRect(shape: GameShape): Rect {
+    val halfW = shape.width / 2f
+    val halfH = shape.height / 2f
+    return Rect(
+        left = shape.x - halfW,
+        top = shape.y - halfH,
+        right = shape.x + halfW,
+        bottom = shape.y + halfH
+    )
+}
+
+private fun Rect.unionRect(other: Rect): Rect = Rect(
+    left = minOf(left, other.left),
+    top = minOf(top, other.top),
+    right = maxOf(right, other.right),
+    bottom = maxOf(bottom, other.bottom)
+)
+
+private fun Rect.outset(padding: Float): Rect = Rect(
+    left = left - padding,
+    top = top - padding,
+    right = right + padding,
+    bottom = bottom + padding
+)
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTutorialShapes(shapes: List<GameShape>) {
     shapes.forEach { shape ->
@@ -836,7 +1201,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawTutorialShapes(
 private enum class TutorialGesture {
     TAP,
     FORM_DRAG,
-    MOVE
+    MOVE,
+    DOUBLE_TAP
 }
 
 @Composable
@@ -865,6 +1231,12 @@ private fun HandHint(
                     x = center.x + cos(progress * 2f * PI).toFloat() * 22f,
                     y = center.y + sin(progress * 2f * PI).toFloat() * 14f
                 )
+            }
+
+            TutorialGesture.DOUBLE_TAP -> {
+                val center = if (anchor != Offset.Unspecified) anchor else Offset(size.width * 0.5f, size.height * 0.45f)
+                val bump = abs(sin(progress * 4f * PI.toFloat())) * 14f
+                Offset(center.x, center.y + bump)
             }
         }
 
