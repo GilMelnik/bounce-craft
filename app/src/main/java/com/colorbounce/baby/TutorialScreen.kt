@@ -565,6 +565,8 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
 
 @Composable
 private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     val settings = remember { tutorialSettings(maxVelocity = 1800) }
     val viewModel = remember { GameViewModel() }
     val shapes by viewModel.shapes.collectAsState(emptyList())
@@ -617,14 +619,10 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
         }
     }
 
-    if (!menuRevealed) {
-        TutorialPhysicsLoop(viewModel = viewModel, settings = settings)
-    }
-
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
         body = if (menuRevealed) {
-            "Tap anywhere outside the shape and its toolbar to finish."
+            ""
         } else {
             "Double-tap the shape to open its menu."
         },
@@ -635,7 +633,12 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
         } else {
             null
         },
-        belowBodyContent = if (menuRevealed) {
+        belowBodyContent = if (isLandscape && menuRevealed) {
+            { ShapeMenuExplainSection() }
+        } else {
+            null
+        },
+        belowWindowContent = if (!isLandscape && menuRevealed) {
             { ShapeMenuExplainSection() }
         } else {
             null
@@ -879,6 +882,7 @@ private fun TutorialStepLayout(
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
+    belowWindowContent: (@Composable () -> Unit)? = null,
     windowContent: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
@@ -926,15 +930,19 @@ private fun TutorialStepLayout(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(16.dp))
-                        Text(
-                            text = body,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = scheme.onBackground,
-                            textAlign = TextAlign.Start,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                        if (body.isNotBlank()) {
+                            Text(
+                                text = body,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = scheme.onBackground,
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                         if (belowBodyContent != null) {
-                            Spacer(Modifier.height(16.dp))
+                            if (body.isNotBlank()) {
+                                Spacer(Modifier.height(16.dp))
+                            }
                             belowBodyContent()
                         }
                         Spacer(Modifier.height(20.dp))
@@ -970,15 +978,19 @@ private fun TutorialStepLayout(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(16.dp))
-                    Text(
-                        text = body,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = scheme.onBackground,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    if (body.isNotBlank()) {
+                        Text(
+                            text = body,
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = scheme.onBackground,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     if (belowBodyContent != null) {
-                        Spacer(Modifier.height(16.dp))
+                        if (body.isNotBlank()) {
+                            Spacer(Modifier.height(16.dp))
+                        }
                         Column(modifier = Modifier.fillMaxWidth()) {
                             belowBodyContent()
                         }
@@ -999,6 +1011,10 @@ private fun TutorialStepLayout(
                         detectTapGestures { onOutsideTap() }
                     }
                 ) {
+                    if (belowWindowContent != null) {
+                        Spacer(Modifier.height(12.dp))
+                        belowWindowContent()
+                    }
                     Spacer(Modifier.height(30.dp))
                     TutorialFooter(step = step, hint = footerHint)
                     Spacer(Modifier.height(110.dp))
