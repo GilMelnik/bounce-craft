@@ -35,6 +35,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
@@ -956,6 +958,20 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
     }
 }
 
+private fun settingsShapePoolDescription(type: ShapeType, included: Boolean): String {
+    val name = when (type) {
+        ShapeType.CIRCLE -> "Circles"
+        ShapeType.RECTANGLE -> "Rectangles"
+        ShapeType.TRIANGLE -> "Triangles"
+        ShapeType.ARCH -> "Arches"
+    }
+    return if (included) {
+        "$name in pool. Tap to remove."
+    } else {
+        "$name not in pool. Tap to add."
+    }
+}
+
 @Composable
 private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -1014,26 +1030,55 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 }
             }
 
-            SettingsSectionLabel("Shape selection")
-            ShapeType.entries.forEach { shapeType ->
-                val checked = settings.selectedShapes.contains(shapeType)
-                ToggleRow(shapeType.name.lowercase().replaceFirstChar { it.titlecase() }, checked) { newChecked ->
-                    val newSet = if (newChecked) {
-                        settings.selectedShapes + shapeType
-                    } else {
-                        (settings.selectedShapes - shapeType).takeIf { it.isNotEmpty() } ?: settings.selectedShapes
+            SettingsSectionLabel("Shapes")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                ShapeSelectionIconChip(
+                    selected = true,
+                    onClick = {
+                        val next = when (settings.shapeSelectionMode) {
+                            ShapeSelectionMode.ALTERNATE -> ShapeSelectionMode.RANDOM
+                            ShapeSelectionMode.RANDOM -> ShapeSelectionMode.ALTERNATE
+                        }
+                        scope.launch { repository.updateShapeSelectionMode(next) }
+                    },
+                    contentDescription = when (settings.shapeSelectionMode) {
+                        ShapeSelectionMode.ALTERNATE ->
+                            "Shapes alternate in order. Tap to switch to random."
+                        ShapeSelectionMode.RANDOM ->
+                            "Shapes spawn randomly. Tap to switch to alternating."
                     }
-                    scope.launch { repository.updateSelectedShapes(newSet) }
+                ) { tint ->
+                    val icon = when (settings.shapeSelectionMode) {
+                        ShapeSelectionMode.ALTERNATE -> Icons.Filled.Repeat
+                        ShapeSelectionMode.RANDOM -> Icons.Filled.Shuffle
+                    }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        modifier = Modifier.size(22.dp),
+                        tint = tint
+                    )
                 }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ShapeSelectionMode.entries.forEach { mode ->
-                    val selected = settings.shapeSelectionMode == mode
-                    Button(
-                        onClick = { scope.launch { repository.updateShapeSelectionMode(mode) } },
-                        colors = modeToggleColors(selected)
-                    ) {
-                        Text(mode.name.lowercase().replaceFirstChar { it.titlecase() })
+                for (shapeType in ShapeType.entries) {
+                    val included = settings.selectedShapes.contains(shapeType)
+                    ShapeSelectionIconChip(
+                        selected = included,
+                        onClick = {
+                            val newSet = if (included) {
+                                (settings.selectedShapes - shapeType).takeIf { it.isNotEmpty() }
+                                    ?: settings.selectedShapes
+                            } else {
+                                settings.selectedShapes + shapeType
+                            }
+                            scope.launch { repository.updateSelectedShapes(newSet) }
+                        },
+                        contentDescription = settingsShapePoolDescription(shapeType, included)
+                    ) { tint ->
+                        ShapeOutlineGlyph(shapeType, tint = tint)
                     }
                 }
             }
