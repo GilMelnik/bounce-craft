@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -64,6 +65,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -90,6 +92,57 @@ private val rainbowLockOpenGradientColors = listOf(
 
 private enum class RulerScreenEdge { Top, Bottom, Start, End }
 
+private fun rulerRestCenter(
+    edge: RulerScreenEdge,
+    alongFraction: Float,
+    w: Float,
+    h: Float,
+    padPx: Float,
+    halfWidthPx: Float,
+    halfHeightPx: Float
+): Offset {
+    val u = alongFraction.coerceIn(0f, 1f)
+    val spanX = (w - 2f * padPx - 2f * halfWidthPx).coerceAtLeast(1e-3f)
+    val spanY = (h - 2f * padPx - 2f * halfHeightPx).coerceAtLeast(1e-3f)
+    return when (edge) {
+        RulerScreenEdge.Top ->
+            Offset(padPx + halfWidthPx + u * spanX, padPx + halfHeightPx)
+        RulerScreenEdge.Bottom ->
+            Offset(padPx + halfWidthPx + u * spanX, h - padPx - halfHeightPx)
+        RulerScreenEdge.Start ->
+            Offset(padPx + halfWidthPx, padPx + halfHeightPx + u * spanY)
+        RulerScreenEdge.End ->
+            Offset(w - padPx - halfWidthPx, padPx + halfHeightPx + u * spanY)
+    }
+}
+
+private fun rulerProjectAlong(
+    p: Offset,
+    edge: RulerScreenEdge,
+    w: Float,
+    h: Float,
+    padPx: Float,
+    halfWidthPx: Float,
+    halfHeightPx: Float
+): Float {
+    val spanX = (w - 2f * padPx - 2f * halfWidthPx).coerceAtLeast(1e-3f)
+    val spanY = (h - 2f * padPx - 2f * halfHeightPx).coerceAtLeast(1e-3f)
+    return when (edge) {
+        RulerScreenEdge.Top, RulerScreenEdge.Bottom ->
+            ((p.x - padPx - halfWidthPx) / spanX).coerceIn(0f, 1f)
+        RulerScreenEdge.Start, RulerScreenEdge.End ->
+            ((p.y - padPx - halfHeightPx) / spanY).coerceIn(0f, 1f)
+    }
+}
+
+private fun rulerNearestEdge(p: Offset, w: Float, h: Float): RulerScreenEdge =
+    listOf(
+        p.y to RulerScreenEdge.Top,
+        h - p.y to RulerScreenEdge.Bottom,
+        p.x to RulerScreenEdge.Start,
+        w - p.x to RulerScreenEdge.End
+    ).minBy { (d, _) -> d }.second
+
 /** Minimized ruler: FAB-sized bubble; still meets ~48dp effective touch target. */
 private val RulerMinimizeHandleSize = 56.dp
 private val RulerMinimizedVisibleSize = 56.dp
@@ -106,6 +159,11 @@ fun CreationModeScreen(
     var rulerExpanded by rememberSaveable { mutableStateOf(true) }
     var rulerEdgeName by rememberSaveable { mutableStateOf("Bottom") }
     var rulerAlongFraction by rememberSaveable { mutableStateOf(0.5f) }
+    var expandedRulerPanelSize by remember { mutableStateOf(IntSize.Zero) }
+    /** True while finishing a drag that started on the expanded ruler header (invisible capture layer). */
+    var collapsingExpandedDragInProgress by remember { mutableStateOf(false) }
+    /** Offset of the minimized bubble from its rest position during [collapsingExpandedDragInProgress]. */
+    var rulerMinimizedDragVisual by remember { mutableStateOf(Offset.Zero) }
     val rulerScreenEdge = runCatching { RulerScreenEdge.valueOf(rulerEdgeName) }
         .getOrDefault(RulerScreenEdge.Bottom)
     var contextMenuShapeId by remember { mutableStateOf<Long?>(null) }
@@ -294,45 +352,79 @@ fun CreationModeScreen(
                 .fillMaxSize()
                 .zIndex(4f)
         ) {
-            if (rulerExpanded) {
-                BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val maxH = (maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
-                    val surfaceMod = when (rulerScreenEdge) {
-                        RulerScreenEdge.Top -> Modifier
-                            .align(Alignment.TopCenter)
-                            .fillMaxWidth()
-                            .heightIn(max = maxH)
-                            .statusBarsPadding()
-                            .padding(horizontal = 8.dp)
-
-                        RulerScreenEdge.Bottom -> Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .heightIn(max = maxH)
-                            .navigationBarsPadding()
-                            .padding(horizontal = 8.dp)
-
-                        RulerScreenEdge.Start -> Modifier
-                            .align(Alignment.CenterStart)
-                            .width(272.dp)
-                            .heightIn(min = 200.dp, max = maxH)
-                            .statusBarsPadding()
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                val density = LocalDensity.current
+                val scheme = MaterialTheme.colorScheme
+                val maxH = (maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
+                val wPx = with(density) { maxWidth.toPx() }
+                val hPx = with(density) { maxHeight.toPx() }
+                val padPx = with(density) { 8.dp.toPx() }
+                val halfB = with(density) { (RulerMinimizeHandleSize / 2).toPx() }
+                val headerHitHeight = 56.dp
+                val along = rulerAlongFraction.coerceIn(0f, 1f)
+                val isSide =
+                    rulerScreenEdge == RulerScreenEdge.Start ||
+                        rulerScreenEdge == RulerScreenEdge.End
+                val measuredPw = expandedRulerPanelSize.width.toFloat()
+                val measuredPh = expandedRulerPanelSize.height.toFloat()
+                val halfW = when {
+                    measuredPw > 0f -> measuredPw / 2f
+                    isSide -> with(density) { 272.dp.toPx() / 2f }
+                    else ->
+                        with(density) {
+                            (maxWidth - 16.dp).toPx().coerceAtLeast(120.dp.toPx()) / 2f
+                        }
+                }
+                val halfH = when {
+                    measuredPh > 0f -> measuredPh / 2f
+                    else ->
+                        with(density) { maxH.toPx() * 0.25f }
+                            .coerceAtLeast(with(density) { 80.dp.toPx() })
+                }
+                val fullW = if (measuredPw > 0f) measuredPw else halfW * 2f
+                val fullH = if (measuredPh > 0f) measuredPh else halfH * 2f
+                val centerPanel = rulerRestCenter(
+                    rulerScreenEdge,
+                    along,
+                    wPx,
+                    hPx,
+                    padPx,
+                    halfW,
+                    halfH
+                )
+                val maxXt = (wPx - fullW).roundToInt().coerceAtLeast(0)
+                val maxYt = (hPx - fullH).roundToInt().coerceAtLeast(0)
+                val tlX = (centerPanel.x - fullW / 2f).roundToInt().coerceIn(0, maxXt)
+                val tlY = (centerPanel.y - fullH / 2f).roundToInt().coerceIn(0, maxYt)
+                val edgePaddingMod = when (rulerScreenEdge) {
+                    RulerScreenEdge.Top ->
+                        Modifier.statusBarsPadding().padding(horizontal = 8.dp)
+                    RulerScreenEdge.Bottom ->
+                        Modifier.navigationBarsPadding().padding(horizontal = 8.dp)
+                    RulerScreenEdge.Start ->
+                        Modifier.statusBarsPadding()
                             .padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
-
-                        RulerScreenEdge.End -> Modifier
-                            .align(Alignment.CenterEnd)
-                            .width(272.dp)
-                            .heightIn(min = 200.dp, max = maxH)
-                            .statusBarsPadding()
+                    RulerScreenEdge.End ->
+                        Modifier.statusBarsPadding()
                             .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
-                    }
-                    val isSide =
-                        rulerScreenEdge == RulerScreenEdge.Start || rulerScreenEdge == RulerScreenEdge.End
+                }
+                val surfaceWidthMod =
+                    if (isSide) Modifier.width(272.dp) else Modifier.fillMaxWidth()
+                val showExpandedChrome = rulerExpanded || collapsingExpandedDragInProgress
+                val rulerExpandedState = rememberUpdatedState(rulerExpanded)
+
+                if (rulerExpanded && !collapsingExpandedDragInProgress) {
                     Surface(
-                        modifier = surfaceMod,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .offset { IntOffset(tlX, tlY) }
+                            .then(surfaceWidthMod)
+                            .heightIn(min = if (isSide) 200.dp else Dp.Unspecified, max = maxH)
+                            .then(edgePaddingMod)
+                            .onSizeChanged { expandedRulerPanelSize = it },
                         shape = RoundedCornerShape(22.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface,
+                        color = scheme.surfaceContainerHigh,
+                        contentColor = scheme.onSurface,
                         shadowElevation = 4.dp,
                         tonalElevation = 2.dp
                     ) {
@@ -347,22 +439,191 @@ fun CreationModeScreen(
                                 }
                                 session = newSession
                             },
-                            onCollapse = { rulerExpanded = false },
+                            onCollapse = {
+                                rulerExpanded = false
+                                collapsingExpandedDragInProgress = false
+                                rulerMinimizedDragVisual = Offset.Zero
+                            },
                             isSideBar = isSide,
                             maxHeight = maxH
                         )
                     }
                 }
-            } else {
-                CreationRulerMinimizedControl(
-                    rulerScreenEdge = rulerScreenEdge,
-                    alongFraction = rulerAlongFraction,
-                    onPlacementChange = { edge, along ->
-                        rulerEdgeName = edge.name
-                        rulerAlongFraction = along
-                    },
-                    onExpand = { rulerExpanded = true }
-                )
+
+                if (collapsingExpandedDragInProgress) {
+                    val cBubble =
+                        rulerRestCenter(
+                            rulerScreenEdge,
+                            along,
+                            wPx,
+                            hPx,
+                            padPx,
+                            halfB,
+                            halfB
+                        ) + rulerMinimizedDragVisual
+                    val maxXB = (wPx - 2f * halfB).roundToInt().coerceAtLeast(0)
+                    val maxYB = (hPx - 2f * halfB).roundToInt().coerceAtLeast(0)
+                    val btlX = (cBubble.x - halfB).roundToInt().coerceIn(0, maxXB)
+                    val btlY = (cBubble.y - halfB).roundToInt().coerceIn(0, maxYB)
+                    Box(
+                        Modifier
+                            .offset { IntOffset(btlX, btlY) }
+                            .size(RulerMinimizeHandleSize)
+                            .graphicsLayer {
+                                scaleX = 1.08f
+                                scaleY = 1.08f
+                                transformOrigin = TransformOrigin(0.5f, 0.5f)
+                            }
+                            .zIndex(1f)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = scheme.secondaryContainer,
+                            shadowElevation = 4.dp,
+                            tonalElevation = 2.dp,
+                            modifier = Modifier.size(RulerMinimizedVisibleSize)
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                RulerLineIcon(
+                                    majorColor = scheme.onSecondaryContainer,
+                                    minorColor = scheme.outlineVariant.copy(alpha = 0.75f),
+                                    size = DpSize(28.dp, 18.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                if (showExpandedChrome) {
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .then(
+                                if (collapsingExpandedDragInProgress) {
+                                    Modifier.fillMaxSize()
+                                } else {
+                                    Modifier
+                                        .offset { IntOffset(tlX, tlY) }
+                                        .then(surfaceWidthMod)
+                                        .height(headerHitHeight)
+                                }
+                            )
+                            .zIndex(3f)
+                            .pointerInput(
+                                rulerScreenEdge,
+                                along,
+                                wPx,
+                                hPx,
+                                padPx,
+                                halfW,
+                                halfH,
+                                halfB
+                            ) {
+                                val touchSlopPx = viewConfiguration.touchSlop
+                                awaitEachGesture {
+                                    val down = awaitFirstDown(requireUnconsumed = false)
+                                    var crossedSlop = false
+                                    var accumulatedPanelDrag = Offset.Zero
+                                    var minimizedContinuation = false
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        val change =
+                                            event.changes.find { it.id == down.id } ?: continue
+                                        if (change.pressed) {
+                                            val fromDown = change.position - down.position
+                                            val justCrossedSlop =
+                                                !crossedSlop &&
+                                                    fromDown.getDistance() >= touchSlopPx
+                                            if (justCrossedSlop) crossedSlop = true
+                                            if (crossedSlop) {
+                                                val delta = change.positionChange()
+                                                if (!minimizedContinuation) {
+                                                    accumulatedPanelDrag += delta
+                                                    if (justCrossedSlop &&
+                                                        rulerExpandedState.value
+                                                    ) {
+                                                        minimizedContinuation = true
+                                                        rulerExpanded = false
+                                                        collapsingExpandedDragInProgress = true
+                                                        val fingerWorld =
+                                                            rulerRestCenter(
+                                                                rulerScreenEdge,
+                                                                along,
+                                                                wPx,
+                                                                hPx,
+                                                                padPx,
+                                                                halfW,
+                                                                halfH
+                                                            ) + accumulatedPanelDrag
+                                                        rulerMinimizedDragVisual =
+                                                            fingerWorld -
+                                                                rulerRestCenter(
+                                                                    rulerScreenEdge,
+                                                                    along,
+                                                                    wPx,
+                                                                    hPx,
+                                                                    padPx,
+                                                                    halfB,
+                                                                    halfB
+                                                                )
+                                                    }
+                                                } else {
+                                                    rulerMinimizedDragVisual += delta
+                                                }
+                                            }
+                                        }
+                                        if (!change.pressed && change.previousPressed) {
+                                            change.consume()
+                                            if (!minimizedContinuation) {
+                                                rulerExpanded = false
+                                                collapsingExpandedDragInProgress = false
+                                                rulerMinimizedDragVisual = Offset.Zero
+                                            } else {
+                                                val p =
+                                                    rulerRestCenter(
+                                                        rulerScreenEdge,
+                                                        along,
+                                                        wPx,
+                                                        hPx,
+                                                        padPx,
+                                                        halfB,
+                                                        halfB
+                                                    ) + rulerMinimizedDragVisual
+                                                val e2 = rulerNearestEdge(p, wPx, hPx)
+                                                rulerEdgeName = e2.name
+                                                rulerAlongFraction =
+                                                    rulerProjectAlong(
+                                                        p,
+                                                        e2,
+                                                        wPx,
+                                                        hPx,
+                                                        padPx,
+                                                        halfB,
+                                                        halfB
+                                                    )
+                                                collapsingExpandedDragInProgress = false
+                                                rulerMinimizedDragVisual = Offset.Zero
+                                            }
+                                            break
+                                        }
+                                        change.consume()
+                                    }
+                                }
+                            }
+                    ) {}
+                }
+
+                if (!rulerExpanded && !collapsingExpandedDragInProgress) {
+                    CreationRulerMinimizedControl(
+                        rulerScreenEdge = rulerScreenEdge,
+                        alongFraction = rulerAlongFraction,
+                        onPlacementChange = { edge, along ->
+                            rulerEdgeName = edge.name
+                            rulerAlongFraction = along
+                        },
+                        onExpand = { rulerExpanded = true }
+                    )
+                }
             }
         }
 
@@ -731,29 +992,7 @@ private fun CreationRulerMinimizedControl(
         val h = with(density) { maxHeight.toPx() }
         val expandMaxDragPx = with(density) { RulerMinimizedExpandMaxDrag.toPx() }
         val along = alongFraction.coerceIn(0f, 1f)
-        val spanX = (w - 2f * pad - 2f * halfB).coerceAtLeast(1e-3f)
-        val spanY = (h - 2f * pad - 2f * halfB).coerceAtLeast(1e-3f)
-        fun restCenter(e: RulerScreenEdge, t: Float): Offset {
-            val u = t.coerceIn(0f, 1f)
-            return when (e) {
-                RulerScreenEdge.Top -> Offset(pad + halfB + u * spanX, pad + halfB)
-                RulerScreenEdge.Bottom -> Offset(pad + halfB + u * spanX, h - pad - halfB)
-                RulerScreenEdge.Start -> Offset(pad + halfB, pad + halfB + u * spanY)
-                RulerScreenEdge.End -> Offset(w - pad - halfB, pad + halfB + u * spanY)
-            }
-        }
-        fun projectAlong(p: Offset, e: RulerScreenEdge): Float = when (e) {
-            RulerScreenEdge.Top, RulerScreenEdge.Bottom -> ((p.x - pad - halfB) / spanX).coerceIn(0f, 1f)
-            RulerScreenEdge.Start, RulerScreenEdge.End -> ((p.y - pad - halfB) / spanY).coerceIn(0f, 1f)
-        }
-        fun nearestEdge(p: Offset): RulerScreenEdge = listOf(
-            p.y to RulerScreenEdge.Top,
-            h - p.y to RulerScreenEdge.Bottom,
-            p.x to RulerScreenEdge.Start,
-            w - p.x to RulerScreenEdge.End
-        ).minBy { (d, _) -> d }.second
-
-        val c = restCenter(rulerScreenEdge, along) + drag
+        val c = rulerRestCenter(rulerScreenEdge, along, w, h, pad, halfB, halfB) + drag
         val maxX = (w - 2f * halfB).roundToInt().coerceAtLeast(0)
         val maxY = (h - 2f * halfB).roundToInt().coerceAtLeast(0)
         val tlX = (c.x - halfB).roundToInt().coerceIn(0, maxX)
@@ -798,9 +1037,20 @@ private fun CreationRulerMinimizedControl(
                                 if (!crossedSlop || finalDrag.getDistance() < expandMaxDragPx) {
                                     onExpand()
                                 } else {
-                                    val p = restCenter(rulerScreenEdge, along) + finalDrag
-                                    val e2 = nearestEdge(p)
-                                    onPlacementChange(e2, projectAlong(p, e2))
+                                    val p = rulerRestCenter(
+                                        rulerScreenEdge,
+                                        along,
+                                        w,
+                                        h,
+                                        pad,
+                                        halfB,
+                                        halfB
+                                    ) + finalDrag
+                                    val e2 = rulerNearestEdge(p, w, h)
+                                    onPlacementChange(
+                                        e2,
+                                        rulerProjectAlong(p, e2, w, h, pad, halfB, halfB)
+                                    )
                                 }
                                 drag = Offset.Zero
                                 break
