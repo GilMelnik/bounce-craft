@@ -139,10 +139,39 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Clears pointer state without applying launch velocity (e.g. before showing shape menu).
-     */
-    fun clearPointer(pointerId: Long) = cleanupPointer(pointerId)
+    fun setShapeExemptFromGlobalHueLock(id: Long, exempt: Boolean) {
+        _shapes.value = _shapes.value.map {
+            if (it.id == id) it.copy(exemptFromGlobalHueLock = exempt) else it
+        }
+    }
+
+    /** Applies ruler spawn color to every shape (creation mode). Ignores per-shape drag lock / exemption. */
+    fun applySpawnColorFromRulerToAllShapes(spawnColor: Triple<Float, Float, Float>?) {
+        _shapes.value = _shapes.value.map { shape ->
+            val (h, s, v) = when (spawnColor) {
+                null -> Triple(Random.nextFloat() * 360f, calmSaturation(), calmValue())
+                else -> Triple(
+                    spawnColor.first,
+                    spawnColor.second.coerceIn(0f, 1f),
+                    spawnColor.third.coerceIn(0f, 1f)
+                )
+            }
+            shape.copy(hue = h, saturation = s, value = v)
+        }
+    }
+
+    private fun hueFrozenWhileDragging(
+        creation: CreationSession?,
+        shape: GameShape,
+        isHeld: Boolean
+    ): Boolean {
+        val global = creation?.disableHueWhileDragging == true
+        return if (global) {
+            !shape.exemptFromGlobalHueLock
+        } else {
+            isHeld && shape.freezeHueWhileDragging
+        }
+    }
 
     fun startInteraction(
         point: Offset,
@@ -382,7 +411,7 @@ class GameViewModel : ViewModel() {
                 val activeIds = activeShapes.values.toSet()
                 _shapes.value = _shapes.value.map { shape ->
                     if (!activeIds.contains(shape.id)) return@map shape
-                    val freezeHue = c.disableHueWhileDragging || shape.freezeHueWhileDragging
+                    val freezeHue = hueFrozenWhileDragging(c, shape, isHeld = true)
                     val hue = if (freezeHue) {
                         shape.hue
                     } else {
@@ -447,8 +476,7 @@ class GameViewModel : ViewModel() {
                     }
                 }
 
-                val disableHue =
-                    c?.disableHueWhileDragging == true || (isHeld && shape.freezeHueWhileDragging)
+                val disableHue = hueFrozenWhileDragging(c, shape, isHeld)
                 val hue = if (isHeld && !disableHue) {
                     ShapeColorAnimator.stepHue(shape.hue, safeDelta)
                 } else {

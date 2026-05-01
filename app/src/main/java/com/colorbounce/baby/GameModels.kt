@@ -24,8 +24,13 @@ data class GameShape(
     val isPinned: Boolean = false,
     /** If true, shape is not removed by shape timeout rules. */
     val isImmortal: Boolean = false,
-    /** If true, this shape's hue does not animate while the user is dragging it. */
-    val freezeHueWhileDragging: Boolean = false
+    /** If true, this shape's hue does not animate while the user is dragging it (when ruler hue lock is off). */
+    val freezeHueWhileDragging: Boolean = false,
+    /**
+     * When creation ruler hue lock is on, this shape may still animate hue while dragged.
+     * Default false: follow the ruler lock for every shape until the user opts out in the shape menu.
+     */
+    val exemptFromGlobalHueLock: Boolean = false
 )
 
 val GameShape.color: Color

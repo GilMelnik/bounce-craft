@@ -332,7 +332,12 @@ fun CreationModeScreen(
                     ) {
                         CreationModeRuler(
                             session = session,
-                            onSessionChange = { session = it },
+                            onSessionChange = { newSession ->
+                                if (newSession.spawnColor != session.spawnColor) {
+                                    viewModel.applySpawnColorFromRulerToAllShapes(newSession.spawnColor)
+                                }
+                                session = newSession
+                            },
                             onCollapse = { rulerExpanded = false },
                             isSideBar = isSide,
                             maxHeight = maxH
@@ -517,12 +522,19 @@ fun CreationModeScreen(
                                 )
                                 ShapeContextMenuHueLockButton(
                                     shape = shape,
-                                    frozen = shape.freezeHueWhileDragging,
+                                    rulerHueGloballyLocked = session.disableHueWhileDragging,
                                     onClick = {
-                                        viewModel.setShapeFreezeHueWhileDragging(
-                                            id,
-                                            !shape.freezeHueWhileDragging
-                                        )
+                                        if (session.disableHueWhileDragging) {
+                                            viewModel.setShapeExemptFromGlobalHueLock(
+                                                id,
+                                                !shape.exemptFromGlobalHueLock
+                                            )
+                                        } else {
+                                            viewModel.setShapeFreezeHueWhileDragging(
+                                                id,
+                                                !shape.freezeHueWhileDragging
+                                            )
+                                        }
                                     }
                                 )
                             }
@@ -570,27 +582,49 @@ private fun ShapeContextMenuIconButton(
 @Composable
 private fun ShapeContextMenuHueLockButton(
     shape: GameShape,
-    frozen: Boolean,
+    rulerHueGloballyLocked: Boolean,
     onClick: () -> Unit
 ) {
+    val scheme = MaterialTheme.colorScheme
     val shapeBodyColor = shape.color
+    val lockedVisual = if (rulerHueGloballyLocked) {
+        !shape.exemptFromGlobalHueLock
+    } else {
+        shape.freezeHueWhileDragging
+    }
+    val emphasized = if (rulerHueGloballyLocked) {
+        shape.exemptFromGlobalHueLock
+    } else {
+        shape.freezeHueWhileDragging
+    }
+    val (openDesc, closedDesc) = if (rulerHueGloballyLocked) {
+        "This shape can shift hue while dragging (overrides ruler lock). Tap to follow ruler lock like other shapes." to
+            "Hue locked while dragging (same as ruler). Tap to allow only this shape to shift hue when dragged."
+    } else {
+        "Tap to freeze hue while dragging this shape." to
+            "Hue frozen while dragging this shape. Tap to allow hue to shift."
+    }
     IconButton(
         onClick = onClick,
         colors = IconButtonDefaults.iconButtonColors(
-            containerColor = Color.Transparent,
-            contentColor = if (frozen) shapeBodyColor else Color.White
+            containerColor = if (emphasized) {
+                scheme.primaryContainer.copy(alpha = 0.92f)
+            } else {
+                Color.Transparent
+            },
+            contentColor = if (lockedVisual) shapeBodyColor else Color.White
         )
     ) {
-        if (frozen) {
+        if (lockedVisual) {
             Icon(
                 imageVector = Icons.Filled.Lock,
-                contentDescription = "Hue frozen while dragging this shape. Tap to allow hue to shift.",
+                contentDescription = closedDesc,
                 tint = shapeBodyColor
             )
         } else {
             Icon(
                 imageVector = Icons.Outlined.LockOpen,
-                contentDescription = "Tap to freeze hue while dragging this shape.",
+                contentDescription = openDesc,
                 tint = Color.White,
                 modifier = Modifier.drawWithCache {
                     val brush = Brush.linearGradient(
