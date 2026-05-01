@@ -27,7 +27,10 @@ class GameViewModel : ViewModel() {
     private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
     private val startPoints = mutableMapOf<Long, Offset>()
     private val lastDragDeltas = mutableMapOf<Long, Offset>()
-    /** Shapes created by a finger in creation mode; pin-from-ruler applies on release, not during the draw gesture. */
+    /**
+     * Shape ids still in the finger-down “draw” gesture (before [endInteraction]).
+     * Resize-on-drag applies only while id is in this set — not after creation ends, even if vx/vy are zero.
+     */
     private val fingerCreatedShapeIds = mutableSetOf<Long>()
     private var screenSize = Offset(1f, 1f)
 
@@ -284,9 +287,7 @@ class GameViewModel : ViewModel() {
                 isPinned = false,
                 isImmortal = imm
             )
-            if (creation != null) {
-                fingerCreatedShapeIds.add(newShape.id)
-            }
+            fingerCreatedShapeIds.add(newShape.id)
             activeShapes[pointerId] = newShape.id
             startPoints[pointerId] = point
             lastDragDeltas[pointerId] = Offset.Zero
@@ -322,8 +323,9 @@ class GameViewModel : ViewModel() {
             _shapes.value = _shapes.value.map { shape ->
                 if (shape.id != shapeId) return@map shape
                 val effPinned = effectiveIsPinned(shape, creation)
-                val isNewish = shape.vx == 0f && shape.vy == 0f && !effPinned
-                val targetSize = if (resizeOnDrag && isNewish) computedSize else shape.width
+                val resizingSpawnGesture =
+                    resizeOnDrag && fingerCreatedShapeIds.contains(shape.id) && !effPinned
+                val targetSize = if (resizingSpawnGesture) computedSize else shape.width
                 val boundedSize = if (constrainInsideScreen) {
                     targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
                 } else {
@@ -337,8 +339,8 @@ class GameViewModel : ViewModel() {
                 shape.copy(
                     x = boundedPoint.x,
                     y = boundedPoint.y,
-                    width = if (resizeOnDrag && isNewish) boundedSize else shape.width,
-                    height = if (resizeOnDrag && isNewish) boundedSize else shape.height,
+                    width = if (resizingSpawnGesture) boundedSize else shape.width,
+                    height = if (resizingSpawnGesture) boundedSize else shape.height,
                     lastInteractionMillis = now
                 )
             }
