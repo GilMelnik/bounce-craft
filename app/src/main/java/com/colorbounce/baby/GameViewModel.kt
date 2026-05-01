@@ -27,6 +27,8 @@ class GameViewModel : ViewModel() {
     private val activeShapes = mutableMapOf<Long, Long>() // pointerId to shapeId
     private val startPoints = mutableMapOf<Long, Offset>()
     private val lastDragDeltas = mutableMapOf<Long, Offset>()
+    /** Shapes created by a finger in creation mode; pin-from-ruler applies on release, not during the draw gesture. */
+    private val fingerCreatedShapeIds = mutableSetOf<Long>()
     private var screenSize = Offset(1f, 1f)
 
     private var gameTimeMillis = 0L
@@ -186,11 +188,7 @@ class GameViewModel : ViewModel() {
                     c.third.coerceIn(0f, 1f)
                 )
             }
-            val (pin, imm) = if (creation != null) {
-                creation.newShapesPinned to creation.newShapesImmortal
-            } else {
-                false to false
-            }
+            val imm = if (creation != null) creation.newShapesImmortal else false
             val newShape = GameShape(
                 id = nextId++,
                 type = newType,
@@ -204,9 +202,12 @@ class GameViewModel : ViewModel() {
                 saturation = sat,
                 value = v,
                 lastInteractionMillis = now,
-                isPinned = pin,
+                isPinned = false,
                 isImmortal = imm
             )
+            if (creation != null) {
+                fingerCreatedShapeIds.add(newShape.id)
+            }
             activeShapes[pointerId] = newShape.id
             startPoints[pointerId] = point
             lastDragDeltas[pointerId] = Offset.Zero
@@ -277,6 +278,7 @@ class GameViewModel : ViewModel() {
             recordInteraction()
             val shapeId = activeShapes[pointerId] ?: return
             val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
+            val wasFingerCreated = fingerCreatedShapeIds.remove(shapeId)
             val wasPinned = _shapes.value.find { it.id == shapeId }?.isPinned == true
             if (wasPinned) {
                 _shapes.value = _shapes.value.map {
@@ -291,6 +293,24 @@ class GameViewModel : ViewModel() {
                     }
                 }
                 cleanupPointer(pointerId)
+                return
+            }
+            val nowMillis = currentGameTimeMillis()
+            if (wasFingerCreated && creation?.newShapesPinned == true) {
+                _shapes.value = _shapes.value.map {
+                    if (it.id == shapeId) {
+                        it.copy(
+                            isPinned = true,
+                            vx = 0f,
+                            vy = 0f,
+                            lastInteractionMillis = nowMillis
+                        )
+                    } else {
+                        it
+                    }
+                }
+                cleanupPointer(pointerId)
+                Log.d(TAG, "Interaction ended: shapeId=$shapeId pinned after creation gesture")
                 return
             }
             if (!applyLaunchVelocity) {
@@ -539,6 +559,7 @@ class GameViewModel : ViewModel() {
         activeShapes.clear()
         startPoints.clear()
         lastDragDeltas.clear()
+        fingerCreatedShapeIds.clear()
     }
 
     private fun currentGameTimeMillis(): Long = gameTimeMillis

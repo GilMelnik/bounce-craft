@@ -1,5 +1,6 @@
 package com.colorbounce.baby
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -9,32 +10,34 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.LockOpen
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material.icons.outlined.Palette
+import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,10 +46,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
@@ -63,7 +66,7 @@ fun CreationModeRuler(
     val scheme = MaterialTheme.colorScheme
     val columnModifier = if (isSideBar) {
         Modifier
-            .widthIn(260.dp, 300.dp)
+            .widthIn(240.dp, 272.dp)
             .heightIn(max = maxHeight)
     } else {
         Modifier
@@ -72,7 +75,7 @@ fun CreationModeRuler(
     }
     Column(
         modifier = columnModifier
-            .padding(12.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
             .verticalScroll(rememberScrollState())
     ) {
         Row(
@@ -82,11 +85,12 @@ fun CreationModeRuler(
         ) {
             RulerLineIcon(
                 color = scheme.primary,
-                size = DpSize(32.dp, 20.dp)
+                size = DpSize(28.dp, 16.dp)
             )
             IconButton(
                 onClick = onCollapse,
-                modifier = Modifier.size(40.dp)
+                modifier = Modifier.size(36.dp),
+                colors = IconButtonDefaults.iconButtonColors(contentColor = scheme.onSurfaceVariant)
             ) {
                 Icon(
                     Icons.Filled.KeyboardArrowDown,
@@ -94,16 +98,15 @@ fun CreationModeRuler(
                 )
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ShapeTypeChoiceChip(
-                label = null,
+            RulerIconChip(
                 selected = session.spawnType == null,
                 onClick = { onSessionChange(session.copy(spawnType = null)) }
             ) {
@@ -115,8 +118,7 @@ fun CreationModeRuler(
                 ShapeType.TRIANGLE,
                 ShapeType.ARCH
             )) {
-                ShapeTypeChoiceChip(
-                    label = null,
+                RulerIconChip(
                     selected = session.spawnType == t,
                     onClick = { onSessionChange(session.copy(spawnType = t)) }
                 ) {
@@ -124,22 +126,24 @@ fun CreationModeRuler(
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            ColorSwatch(
+            RulerIconChip(
                 selected = session.spawnColor == null,
-                onClick = { onSessionChange(session.copy(spawnColor = null)) }
+                onClick = { onSessionChange(session.copy(spawnColor = null)) },
+                contentDescription = "Spawn color follows palette"
             ) {
-                Text(
-                    "A",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = if (session.spawnColor == null) scheme.onPrimary else scheme.onSurface
+                Icon(
+                    Icons.Outlined.Palette,
+                    contentDescription = null,
+                    modifier = Modifier.size(20.dp),
+                    tint = it
                 )
             }
             for (preset in CreationColorPresets) {
@@ -153,117 +157,181 @@ fun CreationModeRuler(
                     preset.s.coerceIn(0f, 1f),
                     preset.v.coerceIn(0f, 1f)
                 )
-                ColorSwatch(
+                RulerIconChip(
                     selected = same,
-                    onClick = { onSessionChange(session.copy(spawnColor = preset.toTriple())) }
+                    onClick = { onSessionChange(session.copy(spawnColor = preset.toTriple())) },
+                    contentDescription = "Color preset"
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(24.dp)
+                            .size(20.dp)
                             .clip(CircleShape)
                             .background(fill)
-                            .border(1.dp, scheme.outline.copy(alpha = 0.5f), CircleShape)
+                            .border(1.dp, scheme.outline.copy(alpha = 0.45f), CircleShape)
                     )
                 }
             }
         }
         Spacer(Modifier.height(8.dp))
-        HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.4f))
-        Spacer(Modifier.height(6.dp))
-        RulerPlayPauseControl(
-            pausedByRuler = session.physicsPaused,
-            onToggle = {
-                onSessionChange(session.copy(physicsPaused = !session.physicsPaused))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilledTonalIconButton(
+                onClick = { onSessionChange(session.copy(physicsPaused = !session.physicsPaused)) },
+                modifier = Modifier.size(40.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = scheme.surfaceContainerHighest,
+                    contentColor = scheme.primary
+                )
+            ) {
+                if (session.physicsPaused) {
+                    Icon(
+                        Icons.Filled.PlayArrow,
+                        contentDescription = "Play — resume physics",
+                        modifier = Modifier.size(22.dp)
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Pause,
+                        contentDescription = "Pause physics",
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
-        )
-        RulerHueLockRow(
-            locked = session.disableHueWhileDragging,
-            onToggle = {
-                onSessionChange(session.copy(disableHueWhileDragging = !session.disableHueWhileDragging))
+            FilledTonalIconButton(
+                onClick = {
+                    onSessionChange(session.copy(disableHueWhileDragging = !session.disableHueWhileDragging))
+                },
+                modifier = Modifier.size(40.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (session.disableHueWhileDragging) {
+                        scheme.primaryContainer
+                    } else {
+                        scheme.surfaceContainerHighest
+                    },
+                    contentColor = if (session.disableHueWhileDragging) {
+                        scheme.onPrimaryContainer
+                    } else {
+                        scheme.onSurfaceVariant
+                    }
+                )
+            ) {
+                Icon(
+                    imageVector = if (session.disableHueWhileDragging) {
+                        Icons.Filled.Lock
+                    } else {
+                        Icons.Outlined.LockOpen
+                    },
+                    contentDescription = if (session.disableHueWhileDragging) {
+                        "Hue frozen while moving. Tap to allow shifting when dragging."
+                    } else {
+                        "Tap to freeze hue while moving shapes."
+                    },
+                    modifier = Modifier.size(22.dp)
+                )
             }
-        )
-        RulerSwitchRow(
-            label = "Pin new",
-            checked = session.newShapesPinned,
-            onChecked = { onSessionChange(session.copy(newShapesPinned = it)) }
-        )
-        RulerSwitchRow(
-            label = "No timeout",
-            checked = session.newShapesImmortal,
-            onChecked = { onSessionChange(session.copy(newShapesImmortal = it)) }
-        )
-        Spacer(Modifier.height(4.dp))
+            FilledTonalIconButton(
+                onClick = { onSessionChange(session.copy(newShapesPinned = !session.newShapesPinned)) },
+                modifier = Modifier.size(40.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (session.newShapesPinned) {
+                        scheme.primaryContainer
+                    } else {
+                        scheme.surfaceContainerHighest
+                    },
+                    contentColor = if (session.newShapesPinned) {
+                        scheme.onPrimaryContainer
+                    } else {
+                        scheme.onSurfaceVariant
+                    }
+                )
+            ) {
+                Icon(
+                    imageVector = if (session.newShapesPinned) {
+                        Icons.Filled.PushPin
+                    } else {
+                        Icons.Outlined.PushPin
+                    },
+                    contentDescription = if (session.newShapesPinned) {
+                        "Pin new shapes on. Tap to turn off."
+                    } else {
+                        "Tap to pin new shapes in place."
+                    },
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+            FilledTonalIconButton(
+                onClick = { onSessionChange(session.copy(newShapesImmortal = !session.newShapesImmortal)) },
+                modifier = Modifier.size(40.dp),
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = if (session.newShapesImmortal) {
+                        scheme.primaryContainer
+                    } else {
+                        scheme.surfaceContainerHighest
+                    },
+                    contentColor = if (session.newShapesImmortal) {
+                        scheme.onPrimaryContainer
+                    } else {
+                        scheme.onSurfaceVariant
+                    }
+                )
+            ) {
+                Icon(
+                    imageVector = if (session.newShapesImmortal) {
+                        Icons.Filled.AllInclusive
+                    } else {
+                        Icons.Outlined.Timer
+                    },
+                    contentDescription = if (session.newShapesImmortal) {
+                        "No timeout — new shapes stay. Tap for normal lifetime."
+                    } else {
+                        "Tap so new shapes do not time out."
+                    },
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+        Spacer(Modifier.height(2.dp))
     }
 }
 
 @Composable
-private fun ShapeTypeChoiceChip(
-    label: String?,
+private fun RulerIconChip(
     selected: Boolean,
     onClick: () -> Unit,
-    icon: @Composable (iconTint: Color) -> Unit
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+    content: @Composable (tint: Color) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val iconTint = if (selected) scheme.onPrimary else scheme.primary
-    FilterChip(
-        selected = selected,
+    val tint = if (selected) scheme.onPrimary else scheme.primary
+    Surface(
         onClick = onClick,
-        label = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { icon(iconTint) }
-                if (label != null) {
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        label,
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (selected) scheme.onPrimary else scheme.onSurface
-                    )
-                }
-            }
+        shape = RoundedCornerShape(10.dp),
+        color = if (selected) scheme.primary else scheme.surfaceContainerHighest,
+        border = if (selected) {
+            null
+        } else {
+            BorderStroke(1.dp, scheme.outline.copy(alpha = 0.35f))
         },
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = scheme.outline,
-            selectedBorderColor = scheme.primary,
-            selectedBorderWidth = 2.dp
-        ),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = scheme.surfaceContainerHighest,
-            labelColor = scheme.onSurface,
-            iconColor = scheme.onSurfaceVariant,
-            selectedContainerColor = scheme.primary,
-            selectedLabelColor = scheme.onPrimary,
-            selectedLeadingIconColor = scheme.onPrimary
-        )
-    )
-}
-
-@Composable
-private fun ColorSwatch(
-    selected: Boolean,
-    onClick: () -> Unit,
-    content: @Composable () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { content() },
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = scheme.outline,
-            selectedBorderColor = scheme.primary,
-            selectedBorderWidth = 2.dp
-        ),
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = scheme.surfaceContainerHighest,
-            labelColor = scheme.onSurface,
-            selectedContainerColor = scheme.primary,
-            selectedLabelColor = scheme.onPrimary
-        )
-    )
+        modifier = modifier
+            .size(34.dp)
+            .then(
+                if (contentDescription != null) {
+                    Modifier.semantics { this.contentDescription = contentDescription }
+                } else {
+                    Modifier
+                }
+            )
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(Modifier.padding(vertical = 4.dp)) {
+                content(tint)
+            }
+        }
+    }
 }
 
 @Composable
@@ -272,8 +340,8 @@ private fun RulerShapeTypeGlyph(
     isDefault: Boolean,
     tint: Color
 ) {
-    Canvas(Modifier.size(22.dp)) {
-        val s = 2.5f
+    Canvas(Modifier.size(20.dp)) {
+        val s = 2.2f
         if (isDefault) {
             val r = size.minDimension * 0.2f
             val cy = size.height / 2f
@@ -297,7 +365,7 @@ private fun RulerShapeTypeGlyph(
             }
             drawPath(path, tint, style = Stroke(s))
         } else {
-            val pad = 2.5f
+            val pad = 2.2f
             when (type) {
                 ShapeType.CIRCLE -> {
                     val r2 = min(size.width, size.height) * 0.4f
@@ -358,135 +426,6 @@ private val CreationColorPresets = listOf(
     HsvPreset(220f, 0.75f, 0.95f),
     HsvPreset(280f, 0.4f, 0.9f)
 )
-
-@Composable
-private fun RulerPauseGlyph(color: Color, modifier: Modifier = Modifier) {
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        val barW = w * 0.22f
-        val gap = w * 0.18f
-        val left = w * 0.18f
-        val top = h * 0.2f
-        val barH = h * 0.6f
-        drawRect(color, topLeft = Offset(left, top), size = Size(barW, barH))
-        drawRect(
-            color,
-            topLeft = Offset(left + barW + gap, top),
-            size = Size(barW, barH)
-        )
-    }
-}
-
-@Composable
-private fun RulerPlayPauseControl(
-    pausedByRuler: Boolean,
-    onToggle: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        IconButton(
-            onClick = onToggle,
-            modifier = Modifier.size(40.dp)
-        ) {
-            if (pausedByRuler) {
-                Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = "Play — resume physics",
-                    tint = scheme.primary
-                )
-            } else {
-                RulerPauseGlyph(
-                    color = scheme.primary,
-                    modifier = Modifier
-                        .size(24.dp)
-                        .semantics { contentDescription = "Pause physics" }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RulerHueLockRow(
-    locked: Boolean,
-    onToggle: () -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            text = if (locked) {
-                "Hue stays fixed while moving"
-            } else {
-                "Hue shifts while you drag"
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = scheme.onSurface,
-            modifier = Modifier
-                .weight(1f)
-                .padding(end = 8.dp)
-        )
-        FilledTonalIconButton(
-            onClick = onToggle,
-            modifier = Modifier.size(48.dp),
-            colors = IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = if (locked) scheme.primaryContainer else scheme.surfaceContainerHighest,
-                contentColor = if (locked) scheme.onPrimaryContainer else scheme.onSurfaceVariant
-            )
-        ) {
-            Icon(
-                imageVector = if (locked) Icons.Filled.Lock else Icons.Outlined.LockOpen,
-                contentDescription = if (locked) {
-                    "Hue frozen while moving. Tap to allow shifting colors when dragging."
-                } else {
-                    "Tap to freeze hue while moving shapes."
-                }
-            )
-        }
-    }
-}
-
-@Composable
-private fun RulerSwitchRow(
-    label: String,
-    checked: Boolean,
-    onChecked: (Boolean) -> Unit
-) {
-    val scheme = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = scheme.onSurface,
-            modifier = Modifier.weight(1f).padding(end = 8.dp)
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = onChecked,
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = scheme.primary,
-                checkedTrackColor = scheme.primaryContainer
-            )
-        )
-    }
-}
 
 /**
  * Straightedge + tick marks (symbolic ruler). Used in the creation bar and on the float handle.

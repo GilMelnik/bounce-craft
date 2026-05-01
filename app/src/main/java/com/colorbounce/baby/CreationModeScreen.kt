@@ -51,6 +51,8 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,12 +87,11 @@ private val rainbowLockOpenGradientColors = listOf(
 
 private enum class RulerScreenEdge { Top, Bottom, Start, End }
 
-/** Minimized ruler: touch target and layout (center math uses half of this). */
-private val RulerMinimizeHandleSize = 80.dp
-/** Visible disc inside the handle box (Material ~48dp minimum; this matches a generous tap target). */
-private val RulerMinimizedVisibleSize = 80.dp
-/** After touch slop, movement below this still restores the ruler instead of repositioning the handle. */
-private val RulerMinimizedExpandMaxDrag = 48.dp
+/** Minimized ruler: FAB-sized bubble; still meets ~48dp effective touch target. */
+private val RulerMinimizeHandleSize = 56.dp
+private val RulerMinimizedVisibleSize = 56.dp
+/** Drag distance under this (after slop) expands the panel instead of moving the bubble — larger = easier to open. */
+private val RulerMinimizedExpandMaxDrag = 72.dp
 
 @Composable
 fun CreationModeScreen(
@@ -290,7 +291,7 @@ fun CreationModeScreen(
         ) {
             if (rulerExpanded) {
                 BoxWithConstraints(Modifier.fillMaxSize()) {
-                    val maxH = (maxHeight * 0.45f).coerceIn(220.dp, 480.dp)
+                    val maxH = (maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
                     val surfaceMod = when (rulerScreenEdge) {
                         RulerScreenEdge.Top -> Modifier
                             .align(Alignment.TopCenter)
@@ -308,15 +309,15 @@ fun CreationModeScreen(
 
                         RulerScreenEdge.Start -> Modifier
                             .align(Alignment.CenterStart)
-                            .width(300.dp)
-                            .heightIn(min = 220.dp, max = maxH)
+                            .width(272.dp)
+                            .heightIn(min = 200.dp, max = maxH)
                             .statusBarsPadding()
                             .padding(start = 4.dp, top = 4.dp, bottom = 4.dp)
 
                         RulerScreenEdge.End -> Modifier
                             .align(Alignment.CenterEnd)
-                            .width(300.dp)
-                            .heightIn(min = 220.dp, max = maxH)
+                            .width(272.dp)
+                            .heightIn(min = 200.dp, max = maxH)
                             .statusBarsPadding()
                             .padding(end = 4.dp, top = 4.dp, bottom = 4.dp)
                     }
@@ -326,7 +327,8 @@ fun CreationModeScreen(
                         modifier = surfaceMod,
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        shadowElevation = 2.dp
+                        shadowElevation = 3.dp,
+                        tonalElevation = 1.dp
                     ) {
                         CreationModeRuler(
                             session = session,
@@ -658,6 +660,12 @@ private fun CreationRulerMinimizedControl(
             modifier = Modifier
                 .offset { IntOffset(tlX, tlY) }
                 .size(RulerMinimizeHandleSize)
+                .graphicsLayer {
+                    val s = if (drag == Offset.Zero) 1f else 1.08f
+                    scaleX = s
+                    scaleY = s
+                    transformOrigin = TransformOrigin(0.5f, 0.5f)
+                }
                 .semantics { contentDescription = "Ruler" }
                 .pointerInput(rulerScreenEdge, w, h, along, expandMaxDragPx) {
                     // detectDragGestures only invokes onDragEnd after touch slop, so a plain tap never
@@ -701,13 +709,14 @@ private fun CreationRulerMinimizedControl(
             Surface(
                 shape = CircleShape,
                 color = scheme.secondaryContainer,
-                shadowElevation = 1.dp,
+                shadowElevation = 4.dp,
+                tonalElevation = 2.dp,
                 modifier = Modifier.size(RulerMinimizedVisibleSize)
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     RulerLineIcon(
                         color = scheme.primary,
-                        size = DpSize(36.dp, 22.dp)
+                        size = DpSize(28.dp, 18.dp)
                     )
                 }
             }
