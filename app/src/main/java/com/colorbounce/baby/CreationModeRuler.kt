@@ -8,7 +8,9 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -66,6 +69,7 @@ fun CreationModeRuler(
     maxHeight: Dp
 ) {
     val scheme = MaterialTheme.colorScheme
+    val ink = scheme.onSurface
     val columnModifier = if (isSideBar) {
         Modifier
             .widthIn(240.dp, 272.dp)
@@ -77,8 +81,9 @@ fun CreationModeRuler(
     }
     Column(
         modifier = columnModifier
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -86,13 +91,16 @@ fun CreationModeRuler(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             RulerLineIcon(
-                color = scheme.primary,
-                size = DpSize(28.dp, 16.dp)
+                majorColor = ink.copy(alpha = 0.9f),
+                minorColor = scheme.outlineVariant.copy(alpha = 0.85f),
+                size = DpSize(32.dp, 18.dp)
             )
             IconButton(
                 onClick = onCollapse,
-                modifier = Modifier.size(36.dp),
-                colors = IconButtonDefaults.iconButtonColors(contentColor = scheme.onSurfaceVariant)
+                modifier = Modifier.size(44.dp),
+                colors = IconButtonDefaults.iconButtonColors(
+                    contentColor = scheme.onSurfaceVariant.copy(alpha = 0.9f)
+                )
             ) {
                 Icon(
                     Icons.Filled.KeyboardArrowDown,
@@ -100,14 +108,12 @@ fun CreationModeRuler(
                 )
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        HorizontalDivider(
+            modifier = Modifier.fillMaxWidth(),
+            thickness = 1.dp,
+            color = scheme.outlineVariant.copy(alpha = 0.35f)
+        )
+        RulerToolStrip {
             RulerIconChip(
                 selected = session.spawnType == null,
                 onClick = {
@@ -147,20 +153,14 @@ fun CreationModeRuler(
             )) {
                 RulerIconChip(
                     selected = session.spawnType == t,
-                    onClick = { onSessionChange(session.copy(spawnType = t)) }
+                    onClick = { onSessionChange(session.copy(spawnType = t)) },
+                    contentDescription = shapeSpawnChipDescription(t)
                 ) {
                     RulerShapeTypeGlyph(t, isDefault = false, tint = it)
                 }
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        RulerToolStrip {
             RulerIconChip(
                 selected = session.spawnColor == null,
                 onClick = { onSessionChange(session.copy(spawnColor = null)) },
@@ -198,142 +198,247 @@ fun CreationModeRuler(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(22.dp)
                             .clip(CircleShape)
                             .background(fill)
-                            .border(1.dp, scheme.outline.copy(alpha = 0.45f), CircleShape)
+                            .border(
+                                1.dp,
+                                scheme.outlineVariant.copy(alpha = 0.55f),
+                                CircleShape
+                            )
                     )
                 }
             }
         }
-        Spacer(Modifier.height(8.dp))
+        RulerSimulationAndRulesCluster(
+            session = session,
+            onSessionChange = onSessionChange,
+            compactGrid = isSideBar
+        )
+    }
+}
+
+@Composable
+private fun RulerToolStrip(content: @Composable RowScope.() -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = scheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.32f)),
+        shadowElevation = 0.dp
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun RulerToolStripPanel(content: @Composable ColumnScope.() -> Unit) {
+    val scheme = MaterialTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color = scheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.32f)),
+        shadowElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            content = content
+        )
+    }
+}
+
+@Composable
+private fun RulerSimulationAndRulesCluster(
+    session: CreationSession,
+    onSessionChange: (CreationSession) -> Unit,
+    compactGrid: Boolean
+) {
+    val scheme = MaterialTheme.colorScheme
+    val physicsPaused = session.physicsPaused
+    val physicsColors = IconButtonDefaults.filledTonalIconButtonColors(
+        containerColor = if (physicsPaused) {
+            scheme.primaryContainer
+        } else {
+            scheme.surfaceContainerHighest.copy(alpha = 0.88f)
+        },
+        contentColor = if (physicsPaused) {
+            scheme.onPrimaryContainer
+        } else {
+            scheme.onSurfaceVariant.copy(alpha = 0.9f)
+        }
+    )
+    val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
+    val lockColors = IconButtonDefaults.filledTonalIconButtonColors(
+        containerColor = if (session.disableHueWhileDragging) {
+            scheme.primaryContainer
+        } else {
+            idleSurface
+        },
+        contentColor = if (session.disableHueWhileDragging) {
+            scheme.onPrimaryContainer
+        } else {
+            scheme.onSurfaceVariant
+        }
+    )
+    val pinColors = IconButtonDefaults.filledTonalIconButtonColors(
+        containerColor = if (session.newShapesPinned) {
+            scheme.primaryContainer
+        } else {
+            idleSurface
+        },
+        contentColor = if (session.newShapesPinned) {
+            scheme.onPrimaryContainer
+        } else {
+            scheme.onSurfaceVariant
+        }
+    )
+    val immortalColors = IconButtonDefaults.filledTonalIconButtonColors(
+        containerColor = if (session.newShapesImmortal) {
+            scheme.primaryContainer
+        } else {
+            idleSurface
+        },
+        contentColor = if (session.newShapesImmortal) {
+            scheme.onPrimaryContainer
+        } else {
+            scheme.onSurfaceVariant
+        }
+    )
+    @Composable
+    fun PhysicsButton() {
+        FilledTonalIconButton(
+            onClick = { onSessionChange(session.copy(physicsPaused = !session.physicsPaused)) },
+            modifier = Modifier.size(44.dp),
+            colors = physicsColors
         ) {
-            FilledTonalIconButton(
-                onClick = { onSessionChange(session.copy(physicsPaused = !session.physicsPaused)) },
-                modifier = Modifier.size(40.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = scheme.surfaceContainerHighest,
-                    contentColor = scheme.primary
-                )
-            ) {
-                if (session.physicsPaused) {
-                    Icon(
-                        Icons.Filled.PlayArrow,
-                        contentDescription = "Play — resume physics",
-                        modifier = Modifier.size(22.dp)
-                    )
-                } else {
-                    Icon(
-                        Icons.Filled.Pause,
-                        contentDescription = "Pause physics",
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-            }
-            FilledTonalIconButton(
-                onClick = {
-                    val locked = session.disableHueWhileDragging
-                    onSessionChange(
-                        session.copy(
-                            disableHueWhileDragging = !locked,
-                            spawnColor = if (locked) null else session.spawnColor
-                        )
-                    )
-                },
-                modifier = Modifier.size(40.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (session.disableHueWhileDragging) {
-                        scheme.primaryContainer
-                    } else {
-                        scheme.surfaceContainerHighest
-                    },
-                    contentColor = if (session.disableHueWhileDragging) {
-                        scheme.onPrimaryContainer
-                    } else {
-                        scheme.onSurfaceVariant
-                    }
-                )
-            ) {
+            if (session.physicsPaused) {
                 Icon(
-                    imageVector = if (session.disableHueWhileDragging) {
-                        Icons.Filled.Lock
-                    } else {
-                        Icons.Outlined.LockOpen
-                    },
-                    contentDescription = if (session.disableHueWhileDragging) {
-                        "Hue frozen while moving. Tap to allow shifting when dragging."
-                    } else {
-                        "Tap to freeze hue while moving shapes."
-                    },
+                    Icons.Filled.PlayArrow,
+                    contentDescription = "Play — resume physics",
                     modifier = Modifier.size(22.dp)
                 )
-            }
-            FilledTonalIconButton(
-                onClick = { onSessionChange(session.copy(newShapesPinned = !session.newShapesPinned)) },
-                modifier = Modifier.size(40.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (session.newShapesPinned) {
-                        scheme.primaryContainer
-                    } else {
-                        scheme.surfaceContainerHighest
-                    },
-                    contentColor = if (session.newShapesPinned) {
-                        scheme.onPrimaryContainer
-                    } else {
-                        scheme.onSurfaceVariant
-                    }
-                )
-            ) {
+            } else {
                 Icon(
-                    imageVector = if (session.newShapesPinned) {
-                        Icons.Filled.PushPin
-                    } else {
-                        Icons.Outlined.PushPin
-                    },
-                    contentDescription = if (session.newShapesPinned) {
-                        "Pin all shapes on. Tap to turn off."
-                    } else {
-                        "Tap to pin all shapes in place."
-                    },
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-            FilledTonalIconButton(
-                onClick = { onSessionChange(session.copy(newShapesImmortal = !session.newShapesImmortal)) },
-                modifier = Modifier.size(40.dp),
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = if (session.newShapesImmortal) {
-                        scheme.primaryContainer
-                    } else {
-                        scheme.surfaceContainerHighest
-                    },
-                    contentColor = if (session.newShapesImmortal) {
-                        scheme.onPrimaryContainer
-                    } else {
-                        scheme.onSurfaceVariant
-                    }
-                )
-            ) {
-                Icon(
-                    imageVector = if (session.newShapesImmortal) {
-                        Icons.Filled.AllInclusive
-                    } else {
-                        Icons.Outlined.Timer
-                    },
-                    contentDescription = if (session.newShapesImmortal) {
-                        "No timeout — all shapes stay. Tap for normal lifetime."
-                    } else {
-                        "Tap so no shape times out."
-                    },
+                    Icons.Filled.Pause,
+                    contentDescription = "Pause physics",
                     modifier = Modifier.size(22.dp)
                 )
             }
         }
-        Spacer(Modifier.height(2.dp))
+    }
+    @Composable
+    fun HueLockButton() {
+        FilledTonalIconButton(
+            onClick = {
+                val locked = session.disableHueWhileDragging
+                onSessionChange(
+                    session.copy(
+                        disableHueWhileDragging = !locked,
+                        spawnColor = if (locked) null else session.spawnColor
+                    )
+                )
+            },
+            modifier = Modifier.size(44.dp),
+            colors = lockColors
+        ) {
+            Icon(
+                imageVector = if (session.disableHueWhileDragging) {
+                    Icons.Filled.Lock
+                } else {
+                    Icons.Outlined.LockOpen
+                },
+                contentDescription = if (session.disableHueWhileDragging) {
+                    "Hue frozen while moving. Tap to allow shifting when dragging."
+                } else {
+                    "Tap to freeze hue while moving shapes."
+                },
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+    @Composable
+    fun PinButton() {
+        FilledTonalIconButton(
+            onClick = { onSessionChange(session.copy(newShapesPinned = !session.newShapesPinned)) },
+            modifier = Modifier.size(44.dp),
+            colors = pinColors
+        ) {
+            Icon(
+                imageVector = if (session.newShapesPinned) {
+                    Icons.Filled.PushPin
+                } else {
+                    Icons.Outlined.PushPin
+                },
+                contentDescription = if (session.newShapesPinned) {
+                    "Pin all shapes on. Tap to turn off."
+                } else {
+                    "Tap to pin all shapes in place."
+                },
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+    @Composable
+    fun LifetimeButton() {
+        FilledTonalIconButton(
+            onClick = { onSessionChange(session.copy(newShapesImmortal = !session.newShapesImmortal)) },
+            modifier = Modifier.size(44.dp),
+            colors = immortalColors
+        ) {
+            Icon(
+                imageVector = if (session.newShapesImmortal) {
+                    Icons.Filled.AllInclusive
+                } else {
+                    Icons.Outlined.Timer
+                },
+                contentDescription = if (session.newShapesImmortal) {
+                    "No timeout — all shapes stay. Tap for normal lifetime."
+                } else {
+                    "Tap so no shape times out."
+                },
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+    if (compactGrid) {
+        RulerToolStripPanel {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PhysicsButton()
+                HueLockButton()
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PinButton()
+                LifetimeButton()
+            }
+        }
+    } else {
+        RulerToolStrip {
+            PhysicsButton()
+            HueLockButton()
+            PinButton()
+            LifetimeButton()
+        }
     }
 }
 
@@ -346,18 +451,26 @@ private fun RulerIconChip(
     content: @Composable (tint: Color) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val tint = if (selected) scheme.onPrimary else scheme.primary
+    val tint = if (selected) {
+        scheme.onPrimaryContainer
+    } else {
+        scheme.onSurfaceVariant.copy(alpha = 0.92f)
+    }
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(10.dp),
-        color = if (selected) scheme.primary else scheme.surfaceContainerHighest,
-        border = if (selected) {
-            null
+        shape = CircleShape,
+        color = if (selected) {
+            scheme.primaryContainer
         } else {
-            BorderStroke(1.dp, scheme.outline.copy(alpha = 0.35f))
+            scheme.surfaceContainerHighest.copy(alpha = 0.72f)
+        },
+        border = if (selected) {
+            BorderStroke(1.dp, scheme.primary.copy(alpha = 0.35f))
+        } else {
+            BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.45f))
         },
         modifier = modifier
-            .size(34.dp)
+            .size(40.dp)
             .then(
                 if (contentDescription != null) {
                     Modifier.semantics { this.contentDescription = contentDescription }
@@ -367,9 +480,7 @@ private fun RulerIconChip(
             )
     ) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Box(Modifier.padding(vertical = 4.dp)) {
-                content(tint)
-            }
+            content(tint)
         }
     }
 }
@@ -454,6 +565,13 @@ private fun RulerShapeTypeGlyph(
     }
 }
 
+private fun shapeSpawnChipDescription(type: ShapeType): String = when (type) {
+    ShapeType.CIRCLE -> "Spawn circles. Tap to select this shape only."
+    ShapeType.RECTANGLE -> "Spawn rectangles. Tap to select this shape only."
+    ShapeType.TRIANGLE -> "Spawn triangles. Tap to select this shape only."
+    ShapeType.ARCH -> "Spawn arches. Tap to select this shape only."
+}
+
 private data class HsvPreset(val hue: Float, val s: Float, val v: Float) {
     fun toTriple(): Triple<Float, Float, Float> = Triple(hue, s, v)
 }
@@ -469,22 +587,24 @@ private val CreationColorPresets = listOf(
 
 /**
  * Straightedge + tick marks (symbolic ruler). Used in the creation bar and on the float handle.
+ * [majorColor] / [minorColor] should come from [MaterialTheme.colorScheme] so light/dark stays legible.
  */
 @Composable
 fun RulerLineIcon(
-    color: Color,
+    majorColor: Color,
     modifier: Modifier = Modifier,
+    minorColor: Color = majorColor.copy(alpha = 0.55f),
     size: DpSize = DpSize(32.dp, 20.dp)
 ) {
     Canvas(modifier.size(size.width, size.height)) {
         val pad = 1.5f
         val w = this.size.width
         val h = this.size.height
-        val y1 = h * 0.35f
-        val y2 = h * 0.7f
-        val stroke = (minOf(w, h) * 0.06f).coerceIn(1.2f, 2.8f)
+        val y1 = h * 0.38f
+        val y2 = h * 0.72f
+        val stroke = (minOf(w, h) * 0.065f).coerceIn(1.3f, 2.9f)
         drawLine(
-            color = color,
+            color = majorColor,
             start = Offset(pad, y1),
             end = Offset(w - pad, y1),
             strokeWidth = stroke,
@@ -493,22 +613,23 @@ fun RulerLineIcon(
         var x = pad + 2f
         var i = 0
         while (x < w - pad) {
-            val th = if (i % 5 == 0) 0.22f * h else 0.1f * h
+            val majorTick = i % 5 == 0
+            val th = if (majorTick) 0.24f * h else 0.11f * h
             drawLine(
-                color = color,
-                start = Offset(x, y1 + stroke * 0.3f),
+                color = if (majorTick) majorColor else minorColor,
+                start = Offset(x, y1 + stroke * 0.35f),
                 end = Offset(x, y1 + th),
-                strokeWidth = stroke * 0.55f,
+                strokeWidth = if (majorTick) stroke * 0.58f else stroke * 0.48f,
                 cap = StrokeCap.Round
             )
-            x += w * 0.09f
+            x += w * 0.088f
             i++
         }
         drawLine(
-            color = color,
-            start = Offset(pad * 0.8f, y2),
-            end = Offset(w * 0.4f, y2),
-            strokeWidth = stroke * 0.85f,
+            color = minorColor,
+            start = Offset(pad * 0.85f, y2),
+            end = Offset(w * 0.42f, y2),
+            strokeWidth = stroke * 0.88f,
             cap = StrokeCap.Round
         )
     }

@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lock
@@ -328,10 +329,11 @@ fun CreationModeScreen(
                         rulerScreenEdge == RulerScreenEdge.Start || rulerScreenEdge == RulerScreenEdge.End
                     Surface(
                         modifier = surfaceMod,
+                        shape = RoundedCornerShape(22.dp),
                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         contentColor = MaterialTheme.colorScheme.onSurface,
-                        shadowElevation = 3.dp,
-                        tonalElevation = 1.dp
+                        shadowElevation = 4.dp,
+                        tonalElevation = 2.dp
                     ) {
                         CreationModeRuler(
                             session = session,
@@ -815,7 +817,8 @@ private fun CreationRulerMinimizedControl(
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     RulerLineIcon(
-                        color = scheme.primary,
+                        majorColor = scheme.onSecondaryContainer,
+                        minorColor = scheme.outlineVariant.copy(alpha = 0.75f),
                         size = DpSize(28.dp, 18.dp)
                     )
                 }
