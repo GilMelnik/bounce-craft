@@ -664,21 +664,15 @@ class GameViewModel : ViewModel() {
                     val a = shapes[i]
                     val b = shapes[j]
 
-                    val dx = b.x - a.x
-                    val dy = b.y - a.y
-                    val distance = max(1f, hypot(dx, dy))
-                    val ra = max(a.width, a.height) / 2f
-                    val rb = max(b.width, b.height) / 2f
-                    val minDist = ra + rb
-                    if (distance >= minDist) continue
+                    val manifold = computePairCollision(a, b) ?: continue
 
                     val aPin = effectiveIsPinned(a, creation)
                     val bPin = effectiveIsPinned(b, creation)
                     if (aPin && a.id !in heldIds && bPin && b.id !in heldIds) continue
 
-                    val nx = dx / distance
-                    val ny = dy / distance
-                    val overlap = minDist - distance
+                    val nx = manifold.nx
+                    val ny = manifold.ny
+                    val overlap = manifold.overlap
 
                     when {
                         a.id in heldIds -> {
@@ -861,8 +855,16 @@ class GameViewModel : ViewModel() {
                 abs(dx) <= halfWidth && dy <= halfHeight && dy >= -halfHeight / 2f
             }
             ShapeType.ARCH -> {
-                val radius = halfWidth
-                hypot(dx, dy) <= radius * 1.1f
+                val cx = shape.x
+                val cy = shape.y + shape.width / 2f
+                val rMid = shape.width / 2f
+                val stroke = archStrokeWidth(shape)
+                val vx = point.x - cx
+                val vy = point.y - cy
+                val len = hypot(vx, vy)
+                len >= 1e-4f &&
+                    abs(len - rMid) <= stroke / 2f &&
+                    cy + rMid * (vy / len) <= cy + 1f
             }
         }
     }
