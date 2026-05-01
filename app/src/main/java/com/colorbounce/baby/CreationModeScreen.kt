@@ -11,7 +11,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -20,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -445,8 +445,9 @@ fun CreationModeScreen(
                 val surfaceWidthMod = when {
                     isSide -> Modifier.width(272.dp)
                     rulerScreenEdge == RulerScreenEdge.Top ->
-                        Modifier.fillMaxWidth().padding(end = CreationExitRulerEndPadding)
-                    else -> Modifier.fillMaxWidth()
+                        Modifier.wrapContentWidth(Alignment.Start)
+                            .padding(end = CreationExitRulerEndPadding)
+                    else -> Modifier.wrapContentWidth(Alignment.Start)
                 }
                 val showExpandedChrome = rulerExpanded || collapsingExpandedDragInProgress
                 val rulerExpandedState = rememberUpdatedState(rulerExpanded)

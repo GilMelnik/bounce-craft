@@ -7,8 +7,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
@@ -16,11 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -35,7 +35,6 @@ import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -49,6 +48,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
@@ -57,6 +57,29 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.min
+
+/** Five 44.dp targets + gaps — widest ruler row (simulation controls). */
+private val RulerStripSlotSpacing = 8.dp
+private val RulerStripPrimaryStride = 44.dp
+private fun rulerFiveStrideRowWidth(): Dp =
+    RulerStripPrimaryStride * 5 + RulerStripSlotSpacing * 4
+
+/** Extra viewport beyond five strides so the next chip peeks when a row scrolls. */
+private val RulerStripScrollPeek = 18.dp
+
+/** Strip inner horizontal padding (10 + 10). */
+private val RulerStripInnerHorizontalPadding = 20.dp
+
+/** Column horizontal padding (10 + 10). */
+private val RulerColumnHorizontalPadding = 20.dp
+
+private fun rulerExpandedPanelWidth(isSideBar: Boolean): Dp =
+    if (isSideBar) {
+        272.dp
+    } else {
+        rulerFiveStrideRowWidth() + RulerStripScrollPeek +
+            RulerStripInnerHorizontalPadding + RulerColumnHorizontalPadding
+    }
 
 @Composable
 fun CreationModeRuler(
@@ -67,32 +90,25 @@ fun CreationModeRuler(
     maxHeight: Dp
 ) {
     val scheme = MaterialTheme.colorScheme
-    val ink = scheme.onSurface
+    val panelWidth = rulerExpandedPanelWidth(isSideBar)
     val columnModifier = if (isSideBar) {
         Modifier
-            .widthIn(240.dp, 272.dp)
+            .widthIn(240.dp, panelWidth)
             .heightIn(max = maxHeight)
     } else {
         Modifier
-            .fillMaxWidth()
+            .width(panelWidth)
             .heightIn(max = maxHeight)
     }
     Column(
-        modifier = columnModifier
-            .padding(horizontal = 10.dp, vertical = 8.dp)
-            .verticalScroll(rememberScrollState()),
+        modifier = columnModifier.padding(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            RulerLineIcon(
-                majorColor = ink.copy(alpha = 0.9f),
-                minorColor = scheme.outlineVariant.copy(alpha = 0.85f),
-                size = DpSize(32.dp, 18.dp)
-            )
+        RulerStripSurface(includePeekInViewportCap = false) {
+            RulerPhysicsControlButton(session = session, onSessionChange = onSessionChange)
+            RulerHueLockControlButton(session = session, onSessionChange = onSessionChange)
+            RulerPinControlButton(session = session, onSessionChange = onSessionChange)
+            RulerLifetimeControlButton(session = session, onSessionChange = onSessionChange)
             IconButton(
                 onClick = onCollapse,
                 modifier = Modifier.size(44.dp),
@@ -106,12 +122,7 @@ fun CreationModeRuler(
                 )
             }
         }
-        HorizontalDivider(
-            modifier = Modifier.fillMaxWidth(),
-            thickness = 1.dp,
-            color = scheme.outlineVariant.copy(alpha = 0.35f)
-        )
-        RulerToolStrip {
+        RulerStripSurface(includePeekInViewportCap = false) {
             RulerIconChip(
                 selected = session.spawnType == null,
                 onClick = {
@@ -158,7 +169,7 @@ fun CreationModeRuler(
                 }
             }
         }
-        RulerToolStrip {
+        RulerStripSurface(includePeekInViewportCap = true) {
             RulerIconChip(
                 selected = session.spawnColor == null,
                 onClick = { onSessionChange(session.copy(spawnColor = null)) },
@@ -208,17 +219,16 @@ fun CreationModeRuler(
                 }
             }
         }
-        RulerSimulationAndRulesCluster(
-            session = session,
-            onSessionChange = onSessionChange,
-            compactGrid = isSideBar
-        )
     }
 }
 
 @Composable
-private fun RulerToolStrip(content: @Composable RowScope.() -> Unit) {
+private fun RulerStripSurface(
+    includePeekInViewportCap: Boolean,
+    content: @Composable RowScope.() -> Unit
+) {
     val scheme = MaterialTheme.colorScheme
+    val scrollState = rememberScrollState()
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
@@ -226,43 +236,38 @@ private fun RulerToolStrip(content: @Composable RowScope.() -> Unit) {
         border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.32f)),
         shadowElevation = 0.dp
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
                 .padding(horizontal = 10.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            content = content
-        )
+            contentAlignment = Alignment.Center
+        ) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val idealCap = rulerFiveStrideRowWidth() +
+                    if (includePeekInViewportCap) RulerStripScrollPeek else 0.dp
+                val viewportW = minOf(maxWidth, idealCap).coerceAtLeast(0.dp)
+                Box(
+                    modifier = Modifier
+                        .width(viewportW)
+                        .align(Alignment.Center)
+                        .clip(RectangleShape)
+                ) {
+                    Row(
+                        modifier = Modifier.horizontalScroll(scrollState),
+                        horizontalArrangement = Arrangement.spacedBy(RulerStripSlotSpacing),
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = content
+                    )
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun RulerToolStripPanel(content: @Composable ColumnScope.() -> Unit) {
-    val scheme = MaterialTheme.colorScheme
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
-        color = scheme.surfaceContainerLow,
-        border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.32f)),
-        shadowElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            content = content
-        )
-    }
-}
-
-@Composable
-private fun RulerSimulationAndRulesCluster(
+private fun RulerPhysicsControlButton(
     session: CreationSession,
-    onSessionChange: (CreationSession) -> Unit,
-    compactGrid: Boolean
+    onSessionChange: (CreationSession) -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val physicsPaused = session.physicsPaused
@@ -278,6 +283,33 @@ private fun RulerSimulationAndRulesCluster(
             scheme.onSurfaceVariant.copy(alpha = 0.9f)
         }
     )
+    FilledTonalIconButton(
+        onClick = { onSessionChange(session.copy(physicsPaused = !session.physicsPaused)) },
+        modifier = Modifier.size(44.dp),
+        colors = physicsColors
+    ) {
+        if (session.physicsPaused) {
+            Icon(
+                Icons.Filled.PlayArrow,
+                contentDescription = "Play — resume physics",
+                modifier = Modifier.size(22.dp)
+            )
+        } else {
+            Icon(
+                Icons.Filled.Pause,
+                contentDescription = "Pause physics",
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RulerHueLockControlButton(
+    session: CreationSession,
+    onSessionChange: (CreationSession) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
     val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
     val lockColors = IconButtonDefaults.filledTonalIconButtonColors(
         containerColor = if (session.disableHueWhileDragging) {
@@ -291,6 +323,42 @@ private fun RulerSimulationAndRulesCluster(
             scheme.onSurfaceVariant
         }
     )
+    FilledTonalIconButton(
+        onClick = {
+            val locked = session.disableHueWhileDragging
+            onSessionChange(
+                session.copy(
+                    disableHueWhileDragging = !locked,
+                    spawnColor = if (locked) null else session.spawnColor
+                )
+            )
+        },
+        modifier = Modifier.size(44.dp),
+        colors = lockColors
+    ) {
+        Icon(
+            imageVector = if (session.disableHueWhileDragging) {
+                Icons.Filled.Lock
+            } else {
+                Icons.Outlined.LockOpen
+            },
+            contentDescription = if (session.disableHueWhileDragging) {
+                "Hue frozen while moving. Tap to allow shifting when dragging."
+            } else {
+                "Tap to freeze hue while moving shapes."
+            },
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun RulerPinControlButton(
+    session: CreationSession,
+    onSessionChange: (CreationSession) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
     val pinColors = IconButtonDefaults.filledTonalIconButtonColors(
         containerColor = if (session.newShapesPinned) {
             scheme.primaryContainer
@@ -303,6 +371,34 @@ private fun RulerSimulationAndRulesCluster(
             scheme.onSurfaceVariant
         }
     )
+    FilledTonalIconButton(
+        onClick = { onSessionChange(session.copy(newShapesPinned = !session.newShapesPinned)) },
+        modifier = Modifier.size(44.dp),
+        colors = pinColors
+    ) {
+        Icon(
+            imageVector = if (session.newShapesPinned) {
+                Icons.Filled.PushPin
+            } else {
+                Icons.Outlined.PushPin
+            },
+            contentDescription = if (session.newShapesPinned) {
+                "Pin all shapes on. Tap to turn off."
+            } else {
+                "Tap to pin all shapes in place."
+            },
+            modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+@Composable
+private fun RulerLifetimeControlButton(
+    session: CreationSession,
+    onSessionChange: (CreationSession) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
     val immortalColors = IconButtonDefaults.filledTonalIconButtonColors(
         containerColor = if (session.newShapesImmortal) {
             scheme.primaryContainer
@@ -315,122 +411,24 @@ private fun RulerSimulationAndRulesCluster(
             scheme.onSurfaceVariant
         }
     )
-    @Composable
-    fun PhysicsButton() {
-        FilledTonalIconButton(
-            onClick = { onSessionChange(session.copy(physicsPaused = !session.physicsPaused)) },
-            modifier = Modifier.size(44.dp),
-            colors = physicsColors
-        ) {
-            if (session.physicsPaused) {
-                Icon(
-                    Icons.Filled.PlayArrow,
-                    contentDescription = "Play — resume physics",
-                    modifier = Modifier.size(22.dp)
-                )
+    FilledTonalIconButton(
+        onClick = { onSessionChange(session.copy(newShapesImmortal = !session.newShapesImmortal)) },
+        modifier = Modifier.size(44.dp),
+        colors = immortalColors
+    ) {
+        Icon(
+            imageVector = if (session.newShapesImmortal) {
+                Icons.Filled.AllInclusive
             } else {
-                Icon(
-                    Icons.Filled.Pause,
-                    contentDescription = "Pause physics",
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-    }
-    @Composable
-    fun HueLockButton() {
-        FilledTonalIconButton(
-            onClick = {
-                val locked = session.disableHueWhileDragging
-                onSessionChange(
-                    session.copy(
-                        disableHueWhileDragging = !locked,
-                        spawnColor = if (locked) null else session.spawnColor
-                    )
-                )
+                Icons.Outlined.Timer
             },
-            modifier = Modifier.size(44.dp),
-            colors = lockColors
-        ) {
-            Icon(
-                imageVector = if (session.disableHueWhileDragging) {
-                    Icons.Filled.Lock
-                } else {
-                    Icons.Outlined.LockOpen
-                },
-                contentDescription = if (session.disableHueWhileDragging) {
-                    "Hue frozen while moving. Tap to allow shifting when dragging."
-                } else {
-                    "Tap to freeze hue while moving shapes."
-                },
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-    @Composable
-    fun PinButton() {
-        FilledTonalIconButton(
-            onClick = { onSessionChange(session.copy(newShapesPinned = !session.newShapesPinned)) },
-            modifier = Modifier.size(44.dp),
-            colors = pinColors
-        ) {
-            Icon(
-                imageVector = if (session.newShapesPinned) {
-                    Icons.Filled.PushPin
-                } else {
-                    Icons.Outlined.PushPin
-                },
-                contentDescription = if (session.newShapesPinned) {
-                    "Pin all shapes on. Tap to turn off."
-                } else {
-                    "Tap to pin all shapes in place."
-                },
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-    @Composable
-    fun LifetimeButton() {
-        FilledTonalIconButton(
-            onClick = { onSessionChange(session.copy(newShapesImmortal = !session.newShapesImmortal)) },
-            modifier = Modifier.size(44.dp),
-            colors = immortalColors
-        ) {
-            Icon(
-                imageVector = if (session.newShapesImmortal) {
-                    Icons.Filled.AllInclusive
-                } else {
-                    Icons.Outlined.Timer
-                },
-                contentDescription = if (session.newShapesImmortal) {
-                    "No timeout — all shapes stay. Tap for normal lifetime."
-                } else {
-                    "Tap so no shape times out."
-                },
-                modifier = Modifier.size(22.dp)
-            )
-        }
-    }
-    if (compactGrid) {
-        RulerToolStripPanel {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PhysicsButton()
-                HueLockButton()
-                PinButton()
-                LifetimeButton()
-            }
-        }
-    } else {
-        RulerToolStrip {
-            PhysicsButton()
-            HueLockButton()
-            PinButton()
-            LifetimeButton()
-        }
+            contentDescription = if (session.newShapesImmortal) {
+                "No timeout — all shapes stay. Tap for normal lifetime."
+            } else {
+                "Tap so no shape times out."
+            },
+            modifier = Modifier.size(22.dp)
+        )
     }
 }
 
