@@ -159,7 +159,14 @@ fun CreationModeRuler(
                 )
                 RulerIconChip(
                     selected = same,
-                    onClick = { onSessionChange(session.copy(spawnColor = preset.toTriple())) },
+                    onClick = {
+                        onSessionChange(
+                            session.copy(
+                                spawnColor = preset.toTriple(),
+                                disableHueWhileDragging = true
+                            )
+                        )
+                    },
                     contentDescription = "Color preset"
                 ) {
                     Box(
@@ -202,7 +209,13 @@ fun CreationModeRuler(
             }
             FilledTonalIconButton(
                 onClick = {
-                    onSessionChange(session.copy(disableHueWhileDragging = !session.disableHueWhileDragging))
+                    val locked = session.disableHueWhileDragging
+                    onSessionChange(
+                        session.copy(
+                            disableHueWhileDragging = !locked,
+                            spawnColor = if (locked) null else session.spawnColor
+                        )
+                    )
                 },
                 modifier = Modifier.size(40.dp),
                 colors = IconButtonDefaults.filledTonalIconButtonColors(

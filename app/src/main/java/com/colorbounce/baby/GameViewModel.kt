@@ -198,21 +198,6 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    /** Applies ruler spawn color to every shape (creation mode). Ignores per-shape drag lock / exemption. */
-    fun applySpawnColorFromRulerToAllShapes(spawnColor: Triple<Float, Float, Float>?) {
-        _shapes.value = _shapes.value.map { shape ->
-            val (h, s, v) = when (spawnColor) {
-                null -> Triple(Random.nextFloat() * 360f, calmSaturation(), calmValue())
-                else -> Triple(
-                    spawnColor.first,
-                    spawnColor.second.coerceIn(0f, 1f),
-                    spawnColor.third.coerceIn(0f, 1f)
-                )
-            }
-            shape.copy(hue = h, saturation = s, value = v)
-        }
-    }
-
     private fun hueFrozenWhileDragging(
         creation: CreationSession?,
         shape: GameShape,

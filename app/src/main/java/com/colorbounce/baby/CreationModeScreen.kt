@@ -334,9 +334,6 @@ fun CreationModeScreen(
                         CreationModeRuler(
                             session = session,
                             onSessionChange = { newSession ->
-                                if (newSession.spawnColor != session.spawnColor) {
-                                    viewModel.applySpawnColorFromRulerToAllShapes(newSession.spawnColor)
-                                }
                                 if (newSession.newShapesPinned != session.newShapesPinned) {
                                     viewModel.applyGlobalPinFromRuler(newSession.newShapesPinned)
                                 }
