@@ -224,55 +224,14 @@ private fun manifoldArchVsArch(a: GameShape, b: GameShape): CollisionManifold? {
     return manifoldCircleVsCircle(ca.x, ca.y, ra, cb.x, cb.y, rb)
 }
 
-private val polygonScratchX = FloatArray(48)
-private val polygonScratchY = FloatArray(48)
-
-/**
- * Filled polygon vs disk at ([circleX],[circleY]) with radius [circleR] (partner shape proxy).
- * Uses signed distance to boundary so disks fully inside the polygon still generate overlap.
- */
-private fun manifoldPolygonVsCircle(
-    polyShape: GameShape,
-    circleX: Float,
-    circleY: Float,
-    circleR: Float
-): CollisionManifold? {
-    val n = fillPolygonVertices(polyShape, polygonScratchX, polygonScratchY)
-    if (n < 3) return null
-    val boundary = closestPointOnPolygonBoundary(circleX, circleY, polygonScratchX, polygonScratchY, n)
-    val qx = boundary.first
-    val qy = boundary.second
-    val dx = circleX - qx
-    val dy = circleY - qy
-    val dist = hypot(dx, dy)
-    if (dist < EPS) {
-        return CollisionManifold(0f, -1f, circleR)
-    }
-    val inside = pointInPolygon(circleX, circleY, polygonScratchX, polygonScratchY, n)
-    val signedDist = if (inside) -dist else dist
-    val penetration = circleR - signedDist
-    if (penetration <= 0f) return null
-    val nx = dx / dist
-    val ny = dy / dist
-    return CollisionManifold(nx, ny, penetration)
-}
-
 internal fun computePairCollision(a: GameShape, b: GameShape): CollisionManifold? {
     val aArch = a.type == ShapeType.ARCH
     val bArch = b.type == ShapeType.ARCH
-    val aPoly = usesPolygonPhysics(a.type)
-    val bPoly = usesPolygonPhysics(b.type)
     return when {
         aArch && bArch -> manifoldArchVsArch(a, b)
         aArch -> manifoldArchVsCircle(a, b.x, b.y, collisionRadius(b))
         bArch -> {
             val m = manifoldArchVsCircle(b, a.x, a.y, collisionRadius(a))
-                ?: return null
-            CollisionManifold(-m.nx, -m.ny, m.overlap)
-        }
-        aPoly && !bPoly -> manifoldPolygonVsCircle(a, b.x, b.y, collisionRadius(b))
-        !aPoly && bPoly -> {
-            val m = manifoldPolygonVsCircle(b, a.x, a.y, collisionRadius(a))
                 ?: return null
             CollisionManifold(-m.nx, -m.ny, m.overlap)
         }
