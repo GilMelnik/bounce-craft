@@ -32,7 +32,9 @@ data class AppSettings(
     val autoSpawnInactivitySeconds: Int = 8,
     val maxVelocityPxPerSec: Int = 1200,
     /** Tutorial has been shown to the user. */
-    val tutorialSeen: Boolean = false
+    val tutorialSeen: Boolean = false,
+    /** When true, play mode shows the creation-style ruler (controls + shape pool). */
+    val showPlayGameRuler: Boolean = false
 )
 
 /** Accessibility label for shape pool toggles (settings and creation ruler). */

@@ -26,6 +26,7 @@ class SettingsRepository(private val context: Context) {
         val autoSpawnSeconds = intPreferencesKey("auto_spawn_seconds")
         val maxVelocity = intPreferencesKey("max_velocity")
         val tutorialSeen = booleanPreferencesKey("tutorial_seen")
+        val showPlayGameRuler = booleanPreferencesKey("show_play_game_ruler")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map(::toSettings)
@@ -75,6 +76,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.tutorialSeen] = true }
     }
 
+    suspend fun updateShowPlayGameRuler(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.showPlayGameRuler] = enabled }
+    }
+
     private fun toSettings(prefs: Preferences): AppSettings {
         val shapeMode = runCatching {
             ShapeMode.valueOf(prefs[Keys.shapeMode] ?: ShapeMode.ALTERNATING.name)
@@ -105,7 +110,8 @@ class SettingsRepository(private val context: Context) {
             disableNotifications = prefs[Keys.disableNotifications] ?: false,
             autoSpawnInactivitySeconds = prefs[Keys.autoSpawnSeconds] ?: 8,
             maxVelocityPxPerSec = prefs[Keys.maxVelocity] ?: 1200,
-            tutorialSeen = prefs[Keys.tutorialSeen] ?: false
+            tutorialSeen = prefs[Keys.tutorialSeen] ?: false,
+            showPlayGameRuler = prefs[Keys.showPlayGameRuler] ?: false
         )
     }
 }

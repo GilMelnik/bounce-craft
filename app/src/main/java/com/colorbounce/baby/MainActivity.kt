@@ -22,13 +22,17 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -77,6 +81,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -596,6 +601,8 @@ private fun AboutScreen(onBack: () -> Unit) {
 private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: () -> Unit) {
     val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
     var contextMenuShapeId by remember { mutableStateOf<Long?>(null) }
+    var playRulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
+    var playRulerExpanded by rememberSaveable { mutableStateOf(true) }
     val contextMenuIdRef = rememberUpdatedState(contextMenuShapeId)
     val doubleTap = remember { DoubleTapState() }
     val slopPx = with(LocalDensity.current) { 20.dp.toPx() }
@@ -612,10 +619,37 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         viewModel.setShapeContextMenuOpen(contextMenuShapeId != null)
     }
 
+    LaunchedEffect(settings.showPlayGameRuler) {
+        if (settings.showPlayGameRuler) {
+            playRulerSession = CreationSession.fromSettings(settings)
+        }
+    }
+
+    LaunchedEffect(settings.selectedShapes, settings.shapeSelectionMode, settings.showPlayGameRuler) {
+        if (!settings.showPlayGameRuler) return@LaunchedEffect
+        playRulerSession = playRulerSession.copy(
+            selectedShapes = settings.selectedShapes,
+            shapeSelectionMode = settings.shapeSelectionMode
+        )
+    }
+
+    val playGestureCreationRef by rememberUpdatedState(
+        if (settings.showPlayGameRuler) playRulerSession else null
+    )
+    val playPhysicsCreationRef by rememberUpdatedState(
+        if (!settings.showPlayGameRuler) {
+            null
+        } else {
+            playRulerSession.copy(
+                physicsPaused = playRulerSession.physicsPaused || (contextMenuShapeId != null)
+            )
+        }
+    )
+
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val exitButtonBg = MaterialTheme.colorScheme.surfaceVariant
 
-    LaunchedEffect(settings.shapeTimeoutSeconds, settings.maxShapes) {
+    LaunchedEffect(settings.shapeTimeoutSeconds, settings.maxShapes, settings.showPlayGameRuler) {
         var last = 0L
         while (isActive) {
             withFrameNanos { frame ->
@@ -625,7 +659,7 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                 }
                 val delta = (frame - last) / 1_000_000_000f
                 last = frame
-                viewModel.updatePhysics(delta, settings)
+                viewModel.updatePhysics(delta, settings, playPhysicsCreationRef)
             }
         }
     }
@@ -635,7 +669,9 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         settings.shapeMode,
         settings.maxShapes,
         settings.selectedShapes,
-        settings.shapeSelectionMode
+        settings.shapeSelectionMode,
+        settings.showPlayGameRuler,
+        playRulerSession
     ).toString()
 
     // Use theme background; avoid hardcoded colors so dark/light stay readable.
@@ -680,7 +716,8 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                     viewModel.startInteraction(
                                                         change.position,
                                                         settings,
-                                                        pid
+                                                        pid,
+                                                        creation = playGestureCreationRef
                                                     )
                                                     downPos[pid] = change.position
                                                 }
@@ -691,13 +728,18 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                         change.position,
                                                         drag,
                                                         settings,
-                                                        pid
+                                                        pid,
+                                                        creation = playGestureCreationRef
                                                     )
                                                 }
 
                                                 !change.pressed && change.previousPressed -> {
                                                     val start = downPos.remove(pid) ?: run {
-                                                        viewModel.endInteraction(settings, pid)
+                                                        viewModel.endInteraction(
+                                                            settings,
+                                                            pid,
+                                                            creation = playGestureCreationRef
+                                                        )
                                                         continue@eventLoop
                                                     }
                                                     val moved =
@@ -716,7 +758,11 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                     } else {
                                                         doubleTap.clear()
                                                     }
-                                                    viewModel.endInteraction(settings, pid)
+                                                    viewModel.endInteraction(
+                                                        settings,
+                                                        pid,
+                                                        creation = playGestureCreationRef
+                                                    )
                                                 }
                                             }
                                         }
@@ -760,7 +806,7 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                         Modifier
                             .fillMaxSize()
                             .align(Alignment.TopStart)
-                            .pointerInput(id, menuSize, settings.maxShapes) {
+                            .pointerInput(id, menuSize, settings.maxShapes, settings.showPlayGameRuler, playRulerSession) {
                                 awaitPointerEventScope {
                                     val overlayDownPos = mutableMapOf<Long, Offset>()
                                     val draggingSelectedShape = mutableMapOf<Long, Boolean>()
@@ -788,7 +834,8 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                             viewModel.startInteraction(
                                                                 p,
                                                                 settings,
-                                                                pid
+                                                                pid,
+                                                                creation = playGestureCreationRef
                                                             )
                                                             overlayDownPos[pid] = p
                                                             draggingSelectedShape[pid] = true
@@ -806,7 +853,8 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                                 change.position,
                                                                 drag,
                                                                 settings,
-                                                                pid
+                                                                pid,
+                                                                creation = playGestureCreationRef
                                                             )
                                                         }
                                                     }
@@ -820,6 +868,7 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                                 viewModel.endInteraction(
                                                                     settings,
                                                                     pid,
+                                                                    creation = playGestureCreationRef,
                                                                     applyLaunchVelocity = false
                                                                 )
                                                             }
@@ -906,13 +955,81 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                 )
                                 ShapeContextMenuHueLockButton(
                                     shape = shape,
-                                    rulerHueGloballyLocked = false,
+                                    rulerHueGloballyLocked = settings.showPlayGameRuler &&
+                                        playRulerSession.disableHueWhileDragging,
                                     onClick = {
                                         viewModel.setShapeFreezeHueWhileDragging(
                                             id,
                                             !shape.freezeHueWhileDragging
                                         )
                                     }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (settings.showPlayGameRuler) {
+            BoxWithConstraints(
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(8f)
+            ) {
+                val scheme = MaterialTheme.colorScheme
+                val maxH = (maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
+                if (playRulerExpanded) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .wrapContentWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 8.dp, vertical = 8.dp)
+                            .heightIn(max = maxH),
+                        shape = RoundedCornerShape(22.dp),
+                        color = scheme.surfaceContainerHigh,
+                        contentColor = scheme.onSurface,
+                        shadowElevation = 4.dp,
+                        tonalElevation = 2.dp
+                    ) {
+                        CreationModeRuler(
+                            session = playRulerSession,
+                            onSessionChange = { newSession ->
+                                if (newSession.newShapesPinned != playRulerSession.newShapesPinned) {
+                                    viewModel.applyGlobalPinFromRuler(newSession.newShapesPinned)
+                                }
+                                if (newSession.newShapesImmortal != playRulerSession.newShapesImmortal) {
+                                    viewModel.applyGlobalImmortalFromRuler(newSession.newShapesImmortal)
+                                }
+                                playRulerSession = newSession
+                            },
+                            onCollapse = { playRulerExpanded = false },
+                            isSideBar = false,
+                            maxHeight = maxH
+                        )
+                    }
+                } else {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 16.dp)
+                            .size(56.dp),
+                        shape = CircleShape,
+                        color = scheme.secondaryContainer,
+                        shadowElevation = 4.dp,
+                        tonalElevation = 2.dp
+                    ) {
+                        Box(
+                            Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            IconButton(onClick = { playRulerExpanded = true }) {
+                                RulerLineIcon(
+                                    majorColor = scheme.onSecondaryContainer,
+                                    minorColor = scheme.outlineVariant.copy(alpha = 0.75f),
+                                    size = DpSize(28.dp, 18.dp)
                                 )
                             }
                         }
@@ -1164,6 +1281,9 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 )
             )
 
+            ToggleRow("Show ruler on play screen", settings.showPlayGameRuler) {
+                scope.launch { repository.updateShowPlayGameRuler(it) }
+            }
             ToggleRow("Keep screen on", settings.keepScreenOn) {
                 scope.launch { repository.updateKeepScreenOn(it) }
             }
