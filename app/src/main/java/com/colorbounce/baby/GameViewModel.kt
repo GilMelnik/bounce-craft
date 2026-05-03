@@ -30,6 +30,7 @@ class GameViewModel : ViewModel() {
     /**
      * Shape ids still in the finger-down “draw” gesture (before [endInteraction]).
      * Resize-on-drag applies only while id is in this set — not after creation ends, even if vx/vy are zero.
+     * During this window, ruler “pin all” does not block resizing; pin takes effect when the gesture ends.
      */
     private val fingerCreatedShapeIds = mutableSetOf<Long>()
     private var screenSize = Offset(1f, 1f)
@@ -324,9 +325,10 @@ class GameViewModel : ViewModel() {
             val now = currentGameTimeMillis()
             _shapes.value = _shapes.value.map { shape ->
                 if (shape.id != shapeId) return@map shape
-                val effPinned = effectiveIsPinned(shape, creation)
+                // While the finger is still down on a newly spawned shape, allow resize even if
+                // the ruler pins all shapes — pin semantics apply after [endInteraction] only.
                 val resizingSpawnGesture =
-                    resizeOnDrag && fingerCreatedShapeIds.contains(shape.id) && !effPinned
+                    resizeOnDrag && fingerCreatedShapeIds.contains(shape.id)
                 val targetSize = if (resizingSpawnGesture) computedSize else shape.width
                 val boundedSize = if (constrainInsideScreen) {
                     targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
