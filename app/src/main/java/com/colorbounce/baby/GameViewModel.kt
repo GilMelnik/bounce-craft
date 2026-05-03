@@ -39,7 +39,6 @@ class GameViewModel : ViewModel() {
     private var gameTimeRemainderMillis = 0f
     private var lastUserInteractionGameMillis = 0L
     private var lastAutoSpawnGameMillis = 0L
-    private var inCreationModeSession = false
 
     /** Normal play: freezes physics while the shape context menu is open (double-tap). */
     private var physicsPausedForShapeContextMenu = false
@@ -70,46 +69,6 @@ class GameViewModel : ViewModel() {
             Log.e(TAG, "Error in onGameEnter", e)
         }
     }
-
-    /**
-     * Clears the playfield and interaction state. Call when entering Creation Mode.
-     */
-     fun enterCreationMode() {
-         try {
-             if (inCreationModeSession) return
-             inCreationModeSession = true
-             physicsPausedForShapeContextMenu = false
-             _shapes.value = emptyList()
-             nextId = 1L
-             lastTypeIndex.set(0)
-             clearInteractionState()
-             gameTimeMillis = 0L
-             gameTimeRemainderMillis = 0f
-             resetAutoSpawnTimers()
-             Log.d(TAG, "enterCreationMode: reset sandbox")
-         } catch (e: Exception) {
-             Log.e(TAG, "Error in enterCreationMode", e)
-         }
-     }
-
-    /**
-     * Clears sandbox state so nothing carries into Play. Call when leaving Creation Mode.
-     */
-     fun exitCreationMode() {
-         try {
-             inCreationModeSession = false
-             _shapes.value = emptyList()
-             nextId = 1L
-             lastTypeIndex.set(0)
-             clearInteractionState()
-             gameTimeMillis = 0L
-             gameTimeRemainderMillis = 0f
-             resetAutoSpawnTimers()
-             Log.d(TAG, "exitCreationMode: cleared")
-         } catch (e: Exception) {
-             Log.e(TAG, "Error in exitCreationMode", e)
-         }
-     }
 
     fun setScreenSize(width: Float, height: Float) {
         try {

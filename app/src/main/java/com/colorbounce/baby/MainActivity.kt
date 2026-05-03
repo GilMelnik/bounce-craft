@@ -42,10 +42,12 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonColors
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -240,7 +242,7 @@ private fun ColorBounceApp(
 ) {
     val currentBackstack by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val route = currentBackstack?.destination?.route ?: "menu"
-    val inGame = route == "game" || route == "creation"
+    val inGame = route == "game"
     var tutorialExitTarget by rememberSaveable { mutableStateOf("game") }
     var previousInGame by remember { mutableStateOf<Boolean?>(null) }
 
@@ -270,10 +272,6 @@ private fun ColorBounceApp(
                         tutorialExitTarget = "game"
                         navController.navigate("tutorial")
                     }
-                },
-                onCreation = {
-                    Log.d(TAG, "Creation Mode clicked")
-                    navController.navigate("creation")
                 },
                 onSettings = {
                     Log.d(TAG, "Navigating to settings screen")
@@ -336,20 +334,12 @@ private fun ColorBounceApp(
                 }
             )
         }
-        composable("creation") {
-            CreationModeScreen(
-                settings = settings,
-                viewModel = gameViewModel,
-                onExit = { navController.popBackStack() }
-            )
-        }
     }
 }
 
 @Composable
 private fun MainMenuScreen(
     onPlay: () -> Unit,
-    onCreation: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit,
     onTutorial: () -> Unit
@@ -420,16 +410,6 @@ private fun MainMenuScreen(
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) { Text("Play") }
-                Button(
-                    modifier = Modifier
-                        .width(220.dp)
-                        .padding(top = 12.dp),
-                    onClick = onCreation,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                ) { Text("Creation Mode") }
                 Button(
                     modifier = Modifier
                         .width(220.dp)
@@ -601,6 +581,7 @@ private fun AboutScreen(onBack: () -> Unit) {
 private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: () -> Unit) {
     val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
     var contextMenuShapeId by remember { mutableStateOf<Long?>(null) }
+    var showAtCapacity by remember { mutableStateOf(false) }
     var playRulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     var playRulerExpanded by rememberSaveable { mutableStateOf(true) }
     val contextMenuIdRef = rememberUpdatedState(contextMenuShapeId)
@@ -631,6 +612,13 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
             selectedShapes = settings.selectedShapes,
             shapeSelectionMode = settings.shapeSelectionMode
         )
+    }
+
+    LaunchedEffect(settings.showPlayGameRuler) {
+        if (!settings.showPlayGameRuler) return@LaunchedEffect
+        viewModel.creationAtCapacity.collect {
+            showAtCapacity = true
+        }
     }
 
     val playGestureCreationRef by rememberUpdatedState(
@@ -854,6 +842,8 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                                                 drag,
                                                                 settings,
                                                                 pid,
+                                                                resizeOnDrag = false,
+                                                                constrainInsideScreen = true,
                                                                 creation = playGestureCreationRef
                                                             )
                                                         }
@@ -931,37 +921,88 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                 )
                                 ShapeContextMenuIconButton(
                                     onClick = {
-                                        viewModel.setShapePinned(id, !shape.isPinned)
+                                        if (settings.showPlayGameRuler && playRulerSession.newShapesPinned) {
+                                            viewModel.setShapeExemptFromGlobalPin(
+                                                id,
+                                                !shape.exemptFromGlobalPin
+                                            )
+                                        } else {
+                                            viewModel.setShapePinned(id, !shape.isPinned)
+                                        }
                                     },
                                     imageVector = Icons.Filled.PushPin,
-                                    contentDescription =
-                                        "Pin this shape. Pinned shapes stay still until you drag them.",
-                                    tint = if (shape.isPinned) menuIconInk else menuIconInkDim,
-                                    emphasized = shape.isPinned
+                                    contentDescription = if (settings.showPlayGameRuler && playRulerSession.newShapesPinned) {
+                                        "Ruler pins all shapes. Tap to unpin only this shape, or tap again to follow the ruler."
+                                    } else {
+                                        "Pin this shape. Turn on ruler pin to pin every shape at once."
+                                    },
+                                    tint = when {
+                                        settings.showPlayGameRuler && playRulerSession.newShapesPinned &&
+                                            !shape.exemptFromGlobalPin -> menuIconInk
+                                        settings.showPlayGameRuler && playRulerSession.newShapesPinned &&
+                                            shape.exemptFromGlobalPin -> menuIconInkDim
+                                        shape.isPinned -> menuIconInk
+                                        else -> menuIconInkDim
+                                    },
+                                    emphasized =
+                                        (settings.showPlayGameRuler && playRulerSession.newShapesPinned && shape.exemptFromGlobalPin) ||
+                                            (!settings.showPlayGameRuler || !playRulerSession.newShapesPinned) && shape.isPinned
                                 )
                                 ShapeContextMenuIconButton(
                                     onClick = {
-                                        viewModel.setShapeImmortal(id, !shape.isImmortal)
+                                        if (settings.showPlayGameRuler && playRulerSession.newShapesImmortal) {
+                                            viewModel.setShapeExemptFromGlobalImmortal(
+                                                id,
+                                                !shape.exemptFromGlobalImmortal
+                                            )
+                                        } else {
+                                            viewModel.setShapeImmortal(id, !shape.isImmortal)
+                                        }
                                     },
-                                    imageVector = if (shape.isImmortal) {
+                                    imageVector = if (
+                                        if (settings.showPlayGameRuler && playRulerSession.newShapesImmortal) {
+                                            !shape.exemptFromGlobalImmortal
+                                        } else {
+                                            shape.isImmortal
+                                        }
+                                    ) {
                                         Icons.Filled.AllInclusive
                                     } else {
                                         Icons.Outlined.Timer
                                     },
-                                    contentDescription =
-                                        "Keep this shape from timing out. Tap again to allow timeout.",
-                                    tint = if (shape.isImmortal) menuIconInk else menuIconInkDim,
-                                    emphasized = shape.isImmortal
+                                    contentDescription = if (settings.showPlayGameRuler && playRulerSession.newShapesImmortal) {
+                                        "Ruler keeps all shapes forever. Tap so only this shape can time out, or again to match the ruler."
+                                    } else {
+                                        "Keep this shape from timing out. Turn on ruler infinity to apply to every shape."
+                                    },
+                                    tint = when {
+                                        settings.showPlayGameRuler && playRulerSession.newShapesImmortal &&
+                                            !shape.exemptFromGlobalImmortal -> menuIconInk
+                                        settings.showPlayGameRuler && playRulerSession.newShapesImmortal &&
+                                            shape.exemptFromGlobalImmortal -> menuIconInkDim
+                                        shape.isImmortal -> menuIconInk
+                                        else -> menuIconInkDim
+                                    },
+                                    emphasized =
+                                        (settings.showPlayGameRuler && playRulerSession.newShapesImmortal && shape.exemptFromGlobalImmortal) ||
+                                            (!settings.showPlayGameRuler || !playRulerSession.newShapesImmortal) && shape.isImmortal
                                 )
                                 ShapeContextMenuHueLockButton(
                                     shape = shape,
                                     rulerHueGloballyLocked = settings.showPlayGameRuler &&
                                         playRulerSession.disableHueWhileDragging,
                                     onClick = {
-                                        viewModel.setShapeFreezeHueWhileDragging(
-                                            id,
-                                            !shape.freezeHueWhileDragging
-                                        )
+                                        if (settings.showPlayGameRuler && playRulerSession.disableHueWhileDragging) {
+                                            viewModel.setShapeExemptFromGlobalHueLock(
+                                                id,
+                                                !shape.exemptFromGlobalHueLock
+                                            )
+                                        } else {
+                                            viewModel.setShapeFreezeHueWhileDragging(
+                                                id,
+                                                !shape.freezeHueWhileDragging
+                                            )
+                                        }
                                     }
                                 )
                             }
@@ -1036,6 +1077,21 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                     }
                 }
             }
+        }
+
+        if (showAtCapacity) {
+            AlertDialog(
+                onDismissRequest = { showAtCapacity = false },
+                title = { Text("Limit reached") },
+                text = {
+                    Text(
+                        "Maximum of $CREATION_MAX_SHAPES shapes. Remove a shape to add more."
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { showAtCapacity = false }) { Text("OK") }
+                }
+            )
         }
 
         // Small always-visible exit affordance.
