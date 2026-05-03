@@ -253,13 +253,10 @@ class GameViewModel : ViewModel() {
                 return
             }
 
-            val newType = when (val t = creation?.spawnType) {
-                null -> chooseType(
-                    settings.selectedShapes,
-                    if (creation != null) creation.defaultShapeSelectionMode else settings.shapeSelectionMode
-                )
-                else -> t
-            }
+            val newType = chooseType(
+                if (creation != null) creation.selectedShapes else settings.selectedShapes,
+                if (creation != null) creation.shapeSelectionMode else settings.shapeSelectionMode
+            )
             val size = 70f
             val spawnPoint = if (constrainInsideScreen) {
                 clampPointInsideScreen(point, size / 2f, size / 2f)
@@ -577,13 +574,10 @@ class GameViewModel : ViewModel() {
                 return
             }
 
-            val newType = when (val t = creation?.spawnType) {
-                null -> chooseType(
-                    settings.selectedShapes,
-                    if (creation != null) creation.defaultShapeSelectionMode else settings.shapeSelectionMode
-                )
-                else -> t
-            }
+            val newType = chooseType(
+                if (creation != null) creation.selectedShapes else settings.selectedShapes,
+                if (creation != null) creation.shapeSelectionMode else settings.shapeSelectionMode
+            )
             val size = Random.nextFloat() * (150f - 60f) + 60f
             val margin = size / 2f
             val rx = Random.nextFloat() * (w - 2 * margin) + margin

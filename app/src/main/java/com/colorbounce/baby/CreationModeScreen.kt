@@ -156,7 +156,7 @@ fun CreationModeScreen(
     viewModel: GameViewModel,
     onExit: () -> Unit
 ) {
-    var session by remember { mutableStateOf(CreationSession()) }
+    var session by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     var rulerExpanded by rememberSaveable { mutableStateOf(true) }
     var rulerEdgeName by rememberSaveable { mutableStateOf("Bottom") }
     var rulerAlongFraction by rememberSaveable { mutableStateOf(0.5f) }
@@ -225,8 +225,8 @@ fun CreationModeScreen(
             }
     ) {
         val pointerKey = listOf(
-            session.spawnType,
-            session.defaultShapeSelectionMode,
+            session.selectedShapes,
+            session.shapeSelectionMode,
             session.spawnColor,
             session.newShapesPinned,
             session.newShapesImmortal,

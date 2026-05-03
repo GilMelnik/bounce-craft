@@ -34,3 +34,18 @@ data class AppSettings(
     /** Tutorial has been shown to the user. */
     val tutorialSeen: Boolean = false
 )
+
+/** Accessibility label for shape pool toggles (settings and creation ruler). */
+fun shapePoolChipDescription(type: ShapeType, included: Boolean): String {
+    val name = when (type) {
+        ShapeType.CIRCLE -> "Circles"
+        ShapeType.RECTANGLE -> "Rectangles"
+        ShapeType.TRIANGLE -> "Triangles"
+        ShapeType.ARCH -> "Arches"
+    }
+    return if (included) {
+        "$name in pool. Tap to remove."
+    } else {
+        "$name not in pool. Tap to add."
+    }
+}

@@ -122,26 +122,22 @@ fun CreationModeRuler(
         }
         RulerStripSurface(includePeekInViewportCap = false) {
             ShapeSelectionIconChip(
-                selected = session.spawnType == null,
+                selected = true,
                 onClick = {
-                    if (session.spawnType == null) {
-                        val next = when (session.defaultShapeSelectionMode) {
-                            ShapeSelectionMode.ALTERNATE -> ShapeSelectionMode.RANDOM
-                            ShapeSelectionMode.RANDOM -> ShapeSelectionMode.ALTERNATE
-                        }
-                        onSessionChange(session.copy(defaultShapeSelectionMode = next))
-                    } else {
-                        onSessionChange(session.copy(spawnType = null))
+                    val next = when (session.shapeSelectionMode) {
+                        ShapeSelectionMode.ALTERNATE -> ShapeSelectionMode.RANDOM
+                        ShapeSelectionMode.RANDOM -> ShapeSelectionMode.ALTERNATE
                     }
+                    onSessionChange(session.copy(shapeSelectionMode = next))
                 },
-                contentDescription = when (session.defaultShapeSelectionMode) {
+                contentDescription = when (session.shapeSelectionMode) {
                     ShapeSelectionMode.ALTERNATE ->
-                        "Default shapes: alternate. Tap to switch to random."
+                        "Shapes alternate in order. Tap to switch to random."
                     ShapeSelectionMode.RANDOM ->
-                        "Default shapes: random. Tap to switch to alternate."
+                        "Shapes spawn randomly. Tap to switch to alternating."
                 }
             ) { tint ->
-                val icon = when (session.defaultShapeSelectionMode) {
+                val icon = when (session.shapeSelectionMode) {
                     ShapeSelectionMode.ALTERNATE -> Icons.Filled.Repeat
                     ShapeSelectionMode.RANDOM -> Icons.Filled.Shuffle
                 }
@@ -152,18 +148,22 @@ fun CreationModeRuler(
                     tint = tint
                 )
             }
-            for (t in listOf(
-                ShapeType.CIRCLE,
-                ShapeType.RECTANGLE,
-                ShapeType.TRIANGLE,
-                ShapeType.ARCH
-            )) {
+            for (shapeType in ShapeType.entries) {
+                val included = session.selectedShapes.contains(shapeType)
                 ShapeSelectionIconChip(
-                    selected = session.spawnType == t,
-                    onClick = { onSessionChange(session.copy(spawnType = t)) },
-                    contentDescription = shapeSpawnChipDescription(t)
+                    selected = included,
+                    onClick = {
+                        val newSet = if (included) {
+                            (session.selectedShapes - shapeType).takeIf { it.isNotEmpty() }
+                                ?: session.selectedShapes
+                        } else {
+                            session.selectedShapes + shapeType
+                        }
+                        onSessionChange(session.copy(selectedShapes = newSet))
+                    },
+                    contentDescription = shapePoolChipDescription(shapeType, included)
                 ) {
-                    ShapeOutlineGlyph(t, tint = it)
+                    ShapeOutlineGlyph(shapeType, tint = it)
                 }
             }
         }
@@ -445,13 +445,6 @@ private fun RulerLifetimeControlButton(
             modifier = Modifier.size(22.dp)
         )
     }
-}
-
-private fun shapeSpawnChipDescription(type: ShapeType): String = when (type) {
-    ShapeType.CIRCLE -> "Spawn circles. Tap to select this shape only."
-    ShapeType.RECTANGLE -> "Spawn rectangles. Tap to select this shape only."
-    ShapeType.TRIANGLE -> "Spawn triangles. Tap to select this shape only."
-    ShapeType.ARCH -> "Spawn arches. Tap to select this shape only."
 }
 
 private data class HsvPreset(val hue: Float, val s: Float, val v: Float) {

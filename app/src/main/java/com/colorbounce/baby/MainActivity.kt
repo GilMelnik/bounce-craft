@@ -958,20 +958,6 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
     }
 }
 
-private fun settingsShapePoolDescription(type: ShapeType, included: Boolean): String {
-    val name = when (type) {
-        ShapeType.CIRCLE -> "Circles"
-        ShapeType.RECTANGLE -> "Rectangles"
-        ShapeType.TRIANGLE -> "Triangles"
-        ShapeType.ARCH -> "Arches"
-    }
-    return if (included) {
-        "$name in pool. Tap to remove."
-    } else {
-        "$name not in pool. Tap to add."
-    }
-}
-
 @Composable
 private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
@@ -1099,7 +1085,7 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                             }
                             scope.launch { repository.updateSelectedShapes(newSet) }
                         },
-                        contentDescription = settingsShapePoolDescription(shapeType, included)
+                        contentDescription = shapePoolChipDescription(shapeType, included)
                     ) { tint ->
                         ShapeOutlineGlyph(shapeType, tint = tint)
                     }
