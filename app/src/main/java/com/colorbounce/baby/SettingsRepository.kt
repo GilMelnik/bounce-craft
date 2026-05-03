@@ -18,6 +18,7 @@ class SettingsRepository(private val context: Context) {
         val selectedShapes = stringPreferencesKey("selected_shapes")
         val shapeSelectionMode = stringPreferencesKey("shape_selection_mode")
         val timeoutSeconds = intPreferencesKey("timeout_seconds")
+        val shapeTimeoutImmortal = booleanPreferencesKey("shape_timeout_immortal")
         val maxShapes = intPreferencesKey("max_shapes")
         val themeMode = stringPreferencesKey("theme_mode")
         val keepScreenOn = booleanPreferencesKey("keep_screen_on")
@@ -32,7 +33,14 @@ class SettingsRepository(private val context: Context) {
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map(::toSettings)
 
     suspend fun updateTimeoutSeconds(seconds: Int) {
-        context.dataStore.edit { it[Keys.timeoutSeconds] = seconds.coerceIn(3, 60) }
+        context.dataStore.edit {
+            it[Keys.timeoutSeconds] = seconds.coerceIn(3, 59)
+            it[Keys.shapeTimeoutImmortal] = false
+        }
+    }
+
+    suspend fun updateShapeTimeoutImmortal(immortal: Boolean) {
+        context.dataStore.edit { it[Keys.shapeTimeoutImmortal] = immortal }
     }
 
     suspend fun updateMaxShapes(maxShapes: Int) {
@@ -109,11 +117,21 @@ class SettingsRepository(private val context: Context) {
             ThemeMode.valueOf(prefs[Keys.themeMode] ?: ThemeMode.SYSTEM.name)
         }.getOrDefault(ThemeMode.SYSTEM)
 
+        val storedSeconds = prefs[Keys.timeoutSeconds] ?: 10
+        val immortalExplicit = prefs[Keys.shapeTimeoutImmortal]
+        val shapeTimeoutImmortal = when {
+            immortalExplicit != null -> immortalExplicit
+            storedSeconds >= 60 -> true
+            else -> false
+        }
+        val shapeTimeoutSeconds = storedSeconds.coerceIn(3, 59)
+
         return AppSettings(
             shapeMode = shapeMode,
             selectedShapes = selectedShapes,
             shapeSelectionMode = shapeSelectionMode,
-            shapeTimeoutSeconds = prefs[Keys.timeoutSeconds] ?: 10,
+            shapeTimeoutImmortal = shapeTimeoutImmortal,
+            shapeTimeoutSeconds = shapeTimeoutSeconds,
             maxShapes = prefs[Keys.maxShapes] ?: 24,
             themeMode = themeMode,
             keepScreenOn = prefs[Keys.keepScreenOn] ?: true,

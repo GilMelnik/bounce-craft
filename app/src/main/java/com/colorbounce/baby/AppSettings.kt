@@ -30,6 +30,8 @@ data class AppSettings(
         ShapeType.DIAMOND
     ),
     val shapeSelectionMode: ShapeSelectionMode = ShapeSelectionMode.ALTERNATE,
+    /** When true, shapes are not removed by idle timeout (same as the ruler infinity control). */
+    val shapeTimeoutImmortal: Boolean = false,
     val shapeTimeoutSeconds: Int = 10,
     val maxShapes: Int = 24,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,

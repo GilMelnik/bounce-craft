@@ -1148,7 +1148,8 @@ private fun TutorialPhysicsLoop(viewModel: GameViewModel, settings: AppSettings)
 private fun tutorialSettings(maxVelocity: Int = 1600): AppSettings = AppSettings(
     selectedShapes = setOf(ShapeType.CIRCLE),
     shapeSelectionMode = ShapeSelectionMode.ALTERNATE,
-    shapeTimeoutSeconds = 60,
+    shapeTimeoutImmortal = true,
+    shapeTimeoutSeconds = 10,
     maxShapes = 1,
     autoSpawnInactivitySeconds = 0,
     maxVelocityPxPerSec = maxVelocity

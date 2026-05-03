@@ -28,7 +28,8 @@ data class CreationSession(
         fun fromSettings(settings: AppSettings): CreationSession =
             CreationSession(
                 selectedShapes = settings.selectedShapes.toSet(),
-                shapeSelectionMode = settings.shapeSelectionMode
+                shapeSelectionMode = settings.shapeSelectionMode,
+                newShapesImmortal = settings.shapeTimeoutImmortal
             )
     }
 }

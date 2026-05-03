@@ -154,9 +154,9 @@ class GameViewModel : ViewModel() {
         }
     }
 
-    private fun effectiveIsImmortal(shape: GameShape, creation: CreationSession?): Boolean {
-        if (creation == null) return shape.isImmortal
-        return if (creation.newShapesImmortal) {
+    private fun effectiveIsImmortal(shape: GameShape, creation: CreationSession?, settings: AppSettings): Boolean {
+        val globalImmortal = settings.shapeTimeoutImmortal || (creation?.newShapesImmortal == true)
+        return if (globalImmortal) {
             !shape.exemptFromGlobalImmortal
         } else {
             shape.isImmortal
@@ -232,7 +232,7 @@ class GameViewModel : ViewModel() {
                     c.third.coerceIn(0f, 1f)
                 )
             }
-            val imm = if (creation != null) creation.newShapesImmortal else false
+            val imm = settings.shapeTimeoutImmortal || (creation?.newShapesImmortal == true)
             val newShape = GameShape(
                 id = nextId++,
                 type = newType,
@@ -435,9 +435,12 @@ class GameViewModel : ViewModel() {
 
             val activeIds = activeShapes.values.toSet()
             val moved = _shapes.value.mapNotNull { shape ->
-                if (!effectiveIsImmortal(shape, c)) {
+                if (!effectiveIsImmortal(shape, c, settings)) {
                     if (now - shape.lastInteractionMillis > timeoutMs) {
-                        Log.d(TAG, "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s)")
+                        Log.d(
+                            TAG,
+                            "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s, immortal=${settings.shapeTimeoutImmortal})"
+                        )
                         return@mapNotNull null
                     }
                 }
@@ -551,9 +554,9 @@ class GameViewModel : ViewModel() {
                 else -> Triple(c.first, c.second.coerceIn(0f, 1f), c.third.coerceIn(0f, 1f))
             }
             val (pin, imm) = if (creation != null) {
-                creation.newShapesPinned to creation.newShapesImmortal
+                creation.newShapesPinned to (settings.shapeTimeoutImmortal || creation.newShapesImmortal)
             } else {
-                false to false
+                false to settings.shapeTimeoutImmortal
             }
             val newShape = GameShape(
                 id = nextId++,

@@ -327,6 +327,7 @@ private fun ColorBounceApp(
         composable("game") {
             GameScreen(
                 settings = settings,
+                repository = settingsRepository,
                 viewModel = gameViewModel,
                 onExit = {
                     Log.d(TAG, "Exiting game, navigating back to menu")
@@ -578,10 +579,16 @@ private fun AboutScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: () -> Unit) {
+private fun GameScreen(
+    settings: AppSettings,
+    repository: SettingsRepository,
+    viewModel: GameViewModel,
+    onExit: () -> Unit
+) {
     val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
     var contextMenuShapeId by remember { mutableStateOf<Long?>(null) }
     var showAtCapacity by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     var playRulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     var playRulerExpanded by rememberSaveable { mutableStateOf(true) }
     val contextMenuIdRef = rememberUpdatedState(contextMenuShapeId)
@@ -606,11 +613,17 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         }
     }
 
-    LaunchedEffect(settings.selectedShapes, settings.shapeSelectionMode, settings.showPlayGameRuler) {
+    LaunchedEffect(
+        settings.selectedShapes,
+        settings.shapeSelectionMode,
+        settings.shapeTimeoutImmortal,
+        settings.showPlayGameRuler
+    ) {
         if (!settings.showPlayGameRuler) return@LaunchedEffect
         playRulerSession = playRulerSession.copy(
             selectedShapes = settings.selectedShapes,
-            shapeSelectionMode = settings.shapeSelectionMode
+            shapeSelectionMode = settings.shapeSelectionMode,
+            newShapesImmortal = settings.shapeTimeoutImmortal
         )
     }
 
@@ -634,10 +647,19 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         }
     )
 
+    val globalShapeTimeoutImmortal =
+        if (settings.showPlayGameRuler) playRulerSession.newShapesImmortal
+        else settings.shapeTimeoutImmortal
+
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val exitButtonBg = MaterialTheme.colorScheme.surfaceVariant
 
-    LaunchedEffect(settings.shapeTimeoutSeconds, settings.maxShapes, settings.showPlayGameRuler) {
+    LaunchedEffect(
+        settings.shapeTimeoutSeconds,
+        settings.shapeTimeoutImmortal,
+        settings.maxShapes,
+        settings.showPlayGameRuler
+    ) {
         var last = 0L
         while (isActive) {
             withFrameNanos { frame ->
@@ -658,6 +680,7 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
         settings.maxShapes,
         settings.selectedShapes,
         settings.shapeSelectionMode,
+        settings.shapeTimeoutImmortal,
         settings.showPlayGameRuler,
         playRulerSession
     ).toString()
@@ -950,7 +973,7 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                 )
                                 ShapeContextMenuIconButton(
                                     onClick = {
-                                        if (settings.showPlayGameRuler && playRulerSession.newShapesImmortal) {
+                                        if (globalShapeTimeoutImmortal) {
                                             viewModel.setShapeExemptFromGlobalImmortal(
                                                 id,
                                                 !shape.exemptFromGlobalImmortal
@@ -959,33 +982,34 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                             viewModel.setShapeImmortal(id, !shape.isImmortal)
                                         }
                                     },
-                                    imageVector = if (
-                                        if (settings.showPlayGameRuler && playRulerSession.newShapesImmortal) {
-                                            !shape.exemptFromGlobalImmortal
+                                    imageVector = if (globalShapeTimeoutImmortal) {
+                                        if (!shape.exemptFromGlobalImmortal) {
+                                            Icons.Filled.AllInclusive
                                         } else {
-                                            shape.isImmortal
+                                            Icons.Outlined.Timer
                                         }
-                                    ) {
+                                    } else if (shape.isImmortal) {
                                         Icons.Filled.AllInclusive
                                     } else {
                                         Icons.Outlined.Timer
                                     },
-                                    contentDescription = if (settings.showPlayGameRuler && playRulerSession.newShapesImmortal) {
-                                        "Ruler keeps all shapes forever. Tap so only this shape can time out, or again to match the ruler."
-                                    } else {
-                                        "Keep this shape from timing out. Turn on ruler infinity to apply to every shape."
+                                    contentDescription = when {
+                                        globalShapeTimeoutImmortal && settings.showPlayGameRuler ->
+                                            "Ruler keeps all shapes forever. Tap so only this shape can time out, or again to match the ruler."
+                                        globalShapeTimeoutImmortal ->
+                                            "Immortal timeout is on. Tap so only this shape can time out, or again to match."
+                                        else ->
+                                            "Keep this shape from timing out. Turn on ruler infinity or Immortal in settings to apply to every shape."
                                     },
                                     tint = when {
-                                        settings.showPlayGameRuler && playRulerSession.newShapesImmortal &&
-                                            !shape.exemptFromGlobalImmortal -> menuIconInk
-                                        settings.showPlayGameRuler && playRulerSession.newShapesImmortal &&
-                                            shape.exemptFromGlobalImmortal -> menuIconInkDim
+                                        globalShapeTimeoutImmortal && !shape.exemptFromGlobalImmortal -> menuIconInk
+                                        globalShapeTimeoutImmortal && shape.exemptFromGlobalImmortal -> menuIconInkDim
                                         shape.isImmortal -> menuIconInk
                                         else -> menuIconInkDim
                                     },
                                     emphasized =
-                                        (settings.showPlayGameRuler && playRulerSession.newShapesImmortal && shape.exemptFromGlobalImmortal) ||
-                                            (!settings.showPlayGameRuler || !playRulerSession.newShapesImmortal) && shape.isImmortal
+                                        (globalShapeTimeoutImmortal && shape.exemptFromGlobalImmortal) ||
+                                            (!globalShapeTimeoutImmortal && shape.isImmortal)
                                 )
                                 ShapeContextMenuHueLockButton(
                                     shape = shape,
@@ -1042,6 +1066,17 @@ private fun GameScreen(settings: AppSettings, viewModel: GameViewModel, onExit: 
                                 }
                                 if (newSession.newShapesImmortal != playRulerSession.newShapesImmortal) {
                                     viewModel.applyGlobalImmortalFromRuler(newSession.newShapesImmortal)
+                                    scope.launch {
+                                        repository.updateShapeTimeoutImmortal(newSession.newShapesImmortal)
+                                    }
+                                }
+                                if (newSession.selectedShapes != playRulerSession.selectedShapes) {
+                                    scope.launch { repository.updateSelectedShapes(newSession.selectedShapes) }
+                                }
+                                if (newSession.shapeSelectionMode != playRulerSession.shapeSelectionMode) {
+                                    scope.launch {
+                                        repository.updateShapeSelectionMode(newSession.shapeSelectionMode)
+                                    }
                                 }
                                 playRulerSession = newSession
                             },
@@ -1266,22 +1301,38 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
             }
 
             Text(
-                "Shape timeout: ${settings.shapeTimeoutSeconds}s",
+                text = if (settings.shapeTimeoutImmortal) {
+                    "Shape timeout: Immortal"
+                } else {
+                    "Shape timeout: ${settings.shapeTimeoutSeconds}s"
+                },
                 color = scheme.onBackground,
                 style = MaterialTheme.typography.bodyLarge
             )
-            Slider(
-                value = settings.shapeTimeoutSeconds.toFloat(),
-                onValueChange = { scope.launch { repository.updateTimeoutSeconds(it.toInt()) } },
-                valueRange = 3f..60f,
-                colors = SliderDefaults.colors(
-                    thumbColor = scheme.primary,
-                    activeTrackColor = scheme.primary,
-                    inactiveTrackColor = scheme.surfaceVariant,
-                    activeTickColor = scheme.onPrimary,
-                    inactiveTickColor = scheme.onSurfaceVariant
+            if (!settings.shapeTimeoutImmortal) {
+                Slider(
+                    value = settings.shapeTimeoutSeconds.toFloat(),
+                    onValueChange = { scope.launch { repository.updateTimeoutSeconds(it.toInt()) } },
+                    valueRange = 3f..59f,
+                    colors = SliderDefaults.colors(
+                        thumbColor = scheme.primary,
+                        activeTrackColor = scheme.primary,
+                        inactiveTrackColor = scheme.surfaceVariant,
+                        activeTickColor = scheme.onPrimary,
+                        inactiveTickColor = scheme.onSurfaceVariant
+                    )
                 )
-            )
+            }
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        repository.updateShapeTimeoutImmortal(!settings.shapeTimeoutImmortal)
+                    }
+                },
+                modifier = Modifier.padding(top = 4.dp)
+            ) {
+                Text(if (settings.shapeTimeoutImmortal) "Use timed timeout" else "Immortal")
+            }
 
             Text(
                 "Max shapes: ${settings.maxShapes}",
