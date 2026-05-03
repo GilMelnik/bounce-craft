@@ -3,7 +3,7 @@ package com.colorbounce.baby
 import androidx.compose.ui.graphics.Color
 
 enum class ShapeType {
-    CIRCLE, RECTANGLE, TRIANGLE, ARCH
+    CIRCLE, RECTANGLE, TRIANGLE, ARCH, STAR, HEART, DIAMOND
 }
 
 data class GameShape(

@@ -9,7 +9,10 @@ data class CreationSession(
         ShapeType.CIRCLE,
         ShapeType.RECTANGLE,
         ShapeType.TRIANGLE,
-        ShapeType.ARCH
+        ShapeType.ARCH,
+        ShapeType.STAR,
+        ShapeType.HEART,
+        ShapeType.DIAMOND
     ),
     val shapeSelectionMode: ShapeSelectionMode = ShapeSelectionMode.ALTERNATE,
     /** When non-null, new shapes use this HSV; otherwise use default random/HSV behavior. */

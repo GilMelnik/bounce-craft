@@ -849,6 +849,8 @@ class GameViewModel : ViewModel() {
                 abs(dx) <= halfWidth && dy <= halfHeight && dy >= -halfHeight / 2f
             }
             ShapeType.ARCH -> pointInArchStroke(point.x, point.y, shape)
+            ShapeType.STAR, ShapeType.HEART, ShapeType.DIAMOND ->
+                pointInPolygonShapeStroke(point.x, point.y, shape)
         }
     }
 

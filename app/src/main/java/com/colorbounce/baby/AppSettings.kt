@@ -20,7 +20,15 @@ enum class ThemeMode {
 
 data class AppSettings(
     val shapeMode: ShapeMode = ShapeMode.ALTERNATING,
-    val selectedShapes: Set<ShapeType> = setOf(ShapeType.CIRCLE, ShapeType.RECTANGLE, ShapeType.TRIANGLE, ShapeType.ARCH),
+    val selectedShapes: Set<ShapeType> = setOf(
+        ShapeType.CIRCLE,
+        ShapeType.RECTANGLE,
+        ShapeType.TRIANGLE,
+        ShapeType.ARCH,
+        ShapeType.STAR,
+        ShapeType.HEART,
+        ShapeType.DIAMOND
+    ),
     val shapeSelectionMode: ShapeSelectionMode = ShapeSelectionMode.ALTERNATE,
     val shapeTimeoutSeconds: Int = 10,
     val maxShapes: Int = 24,
@@ -44,6 +52,9 @@ fun shapePoolChipDescription(type: ShapeType, included: Boolean): String {
         ShapeType.RECTANGLE -> "Rectangles"
         ShapeType.TRIANGLE -> "Triangles"
         ShapeType.ARCH -> "Arches"
+        ShapeType.STAR -> "Stars"
+        ShapeType.HEART -> "Hearts"
+        ShapeType.DIAMOND -> "Diamonds"
     }
     return if (included) {
         "$name in pool. Tap to remove."

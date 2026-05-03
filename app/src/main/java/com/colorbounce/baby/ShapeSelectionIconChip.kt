@@ -122,6 +122,33 @@ fun ShapeOutlineGlyph(
                     style = Stroke(s)
                 )
             }
+            ShapeType.STAR, ShapeType.HEART, ShapeType.DIAMOND -> {
+                val fake = GameShape(
+                    id = 0L,
+                    type = type,
+                    x = size.width / 2f,
+                    y = size.height / 2f,
+                    width = size.width - pad * 2f,
+                    height = size.height - pad * 2f,
+                    vx = 0f,
+                    vy = 0f,
+                    hue = 0f,
+                    saturation = 0f,
+                    value = 1f,
+                    lastInteractionMillis = 0L
+                )
+                val vx = FloatArray(48)
+                val vy = FloatArray(48)
+                val n = fillPolygonVertices(fake, vx, vy)
+                if (n >= 3) {
+                    val path = Path().apply {
+                        moveTo(vx[0], vy[0])
+                        for (i in 1 until n) lineTo(vx[i], vy[i])
+                        close()
+                    }
+                    drawPath(path, color = tint, style = Stroke(s))
+                }
+            }
         }
     }
 }

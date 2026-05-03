@@ -86,9 +86,20 @@ class SettingsRepository(private val context: Context) {
         }.getOrDefault(ShapeMode.ALTERNATING)
 
         val selectedShapes = runCatching {
-            val str = prefs[Keys.selectedShapes] ?: "CIRCLE,RECTANGLE,TRIANGLE,ARCH"
+            val str = prefs[Keys.selectedShapes]
+                ?: "CIRCLE,RECTANGLE,TRIANGLE,ARCH,STAR,HEART,DIAMOND"
             str.split(",").mapNotNull { runCatching { ShapeType.valueOf(it) }.getOrNull() }.toSet()
-        }.getOrDefault(setOf(ShapeType.CIRCLE, ShapeType.RECTANGLE, ShapeType.TRIANGLE, ShapeType.ARCH)).takeIf { it.isNotEmpty() } ?: setOf(ShapeType.CIRCLE)
+        }.getOrDefault(
+            setOf(
+                ShapeType.CIRCLE,
+                ShapeType.RECTANGLE,
+                ShapeType.TRIANGLE,
+                ShapeType.ARCH,
+                ShapeType.STAR,
+                ShapeType.HEART,
+                ShapeType.DIAMOND
+            )
+        ).takeIf { it.isNotEmpty() } ?: setOf(ShapeType.CIRCLE)
 
         val shapeSelectionMode = runCatching {
             ShapeSelectionMode.valueOf(prefs[Keys.shapeSelectionMode] ?: ShapeSelectionMode.ALTERNATE.name)

@@ -63,6 +63,22 @@ fun GamePlayfield(
                         style = Stroke(width = strokeWidth, cap = StrokeCap.Butt)
                     )
                 }
+
+                ShapeType.STAR, ShapeType.HEART, ShapeType.DIAMOND -> {
+                    val vx = FloatArray(48)
+                    val vy = FloatArray(48)
+                    val n = fillPolygonVertices(shape, vx, vy)
+                    if (n >= 3) {
+                        val path = Path().apply {
+                            moveTo(vx[0], vy[0])
+                            for (i in 1 until n) {
+                                lineTo(vx[i], vy[i])
+                            }
+                            close()
+                        }
+                        drawPath(path, color = shape.color)
+                    }
+                }
             }
         }
     }
