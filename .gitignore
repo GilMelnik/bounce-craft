@@ -16,6 +16,9 @@ captures/
 *.apk
 output-metadata.json
 
+# Cursor IDE — machine-specific editor settings
+.cursor/settings.json
+
 # IntelliJ
 *.iml
 .idea/
