@@ -27,6 +27,7 @@ class SettingsRepository(private val context: Context) {
         val maxVelocity = intPreferencesKey("max_velocity")
         val tutorialSeen = booleanPreferencesKey("tutorial_seen")
         val showPlayGameRuler = booleanPreferencesKey("show_play_game_ruler")
+        val doubleTapShapeMenu = booleanPreferencesKey("double_tap_shape_menu")
     }
 
     val settingsFlow: Flow<AppSettings> = context.dataStore.data.map(::toSettings)
@@ -87,6 +88,10 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.showPlayGameRuler] = enabled }
     }
 
+    suspend fun updateDoubleTapShapeMenu(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.doubleTapShapeMenu] = enabled }
+    }
+
     private fun toSettings(prefs: Preferences): AppSettings {
         val selectedShapes = runCatching {
             val str = prefs[Keys.selectedShapes]
@@ -134,7 +139,8 @@ class SettingsRepository(private val context: Context) {
             autoSpawnInactivitySeconds = prefs[Keys.autoSpawnSeconds] ?: 8,
             maxVelocityPxPerSec = prefs[Keys.maxVelocity] ?: 1200,
             tutorialSeen = prefs[Keys.tutorialSeen] ?: false,
-            showPlayGameRuler = prefs[Keys.showPlayGameRuler] ?: false
+            showPlayGameRuler = prefs[Keys.showPlayGameRuler] ?: false,
+            doubleTapShapeMenu = prefs[Keys.doubleTapShapeMenu] ?: false
         )
     }
 }

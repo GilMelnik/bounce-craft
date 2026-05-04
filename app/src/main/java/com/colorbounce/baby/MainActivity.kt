@@ -862,6 +862,10 @@ private fun GameScreen(
         onDispose { viewModel.setShapeContextMenuOpen(false) }
     }
 
+    LaunchedEffect(settings.doubleTapShapeMenu) {
+        if (!settings.doubleTapShapeMenu) dismissShapeMenu()
+    }
+
     SideEffect {
         viewModel.setShapeContextMenuOpen(contextMenuShapeId != null)
     }
@@ -948,6 +952,7 @@ private fun GameScreen(
         settings.shapeSelectionMode,
         settings.shapeTimeoutImmortal,
         settings.showPlayGameRuler,
+        settings.doubleTapShapeMenu,
         playRulerSession
     ).toString()
 
@@ -981,13 +986,16 @@ private fun GameScreen(
                                             when {
                                                 change.pressed && !change.previousPressed -> {
                                                     val hit = viewModel.shapeAt(change.position)
-                                                    if (hit != null && doubleTap.isSecondTapOnShape(hit.id)) {
+                                                    if (settings.doubleTapShapeMenu &&
+                                                        hit != null &&
+                                                        doubleTap.isSecondTapOnShape(hit.id)
+                                                    ) {
                                                         contextMenuShapeId = hit.id
                                                         viewModel.resetShapeLifetimeTimer(hit.id)
                                                         downPos[pid] = change.position
                                                         continue@eventLoop
                                                     }
-                                                    if (hit == null) {
+                                                    if (settings.doubleTapShapeMenu && hit == null) {
                                                         doubleTap.clear()
                                                     }
                                                     viewModel.startInteraction(
@@ -1022,18 +1030,20 @@ private fun GameScreen(
                                                     val moved =
                                                         (change.position - start).getDistance() > slopPx
                                                     val activeId = viewModel.activeShapeIdFor(pid)
-                                                    if (activeId != null) {
-                                                        if (!moved) {
-                                                            doubleTap.recordShapeTap(activeId)
+                                                    if (settings.doubleTapShapeMenu) {
+                                                        if (activeId != null) {
+                                                            if (!moved) {
+                                                                doubleTap.recordShapeTap(activeId)
+                                                            } else {
+                                                                doubleTap.clear()
+                                                            }
+                                                        } else if (!moved) {
+                                                            viewModel.shapeAt(change.position)
+                                                                ?.id
+                                                                ?.let { doubleTap.recordShapeTap(it) }
                                                         } else {
                                                             doubleTap.clear()
                                                         }
-                                                    } else if (!moved) {
-                                                        viewModel.shapeAt(change.position)
-                                                            ?.id
-                                                            ?.let { doubleTap.recordShapeTap(it) }
-                                                    } else {
-                                                        doubleTap.clear()
                                                     }
                                                     viewModel.endInteraction(
                                                         settings,
@@ -1309,10 +1319,6 @@ private fun GameScreen(
         if (settings.showPlayGameRuler) {
             val density = LocalDensity.current
             val layoutDirection = LocalLayoutDirection.current
-            val expandedRef = rememberUpdatedState(playRulerExpanded)
-            val expandedHitRef = rememberUpdatedState(rulerExpandedHitRect)
-            val fabHitRef = rememberUpdatedState(rulerFabHitRect)
-
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
@@ -1372,81 +1378,14 @@ private fun GameScreen(
 
                 val fabCenter = rulerDragCenter ?: dockedFab()
 
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            awaitEachGesture {
-                                val down = awaitFirstDown(
-                                    requireUnconsumed = false,
-                                    pass = PointerEventPass.Final
-                                )
-                                val pos = down.position
-                                val expanded = expandedRef.value
-                                val eRect = expandedHitRef.value
-                                val fRect = fabHitRef.value
-                                val hitE = expanded && eRect?.contains(pos) == true
-                                val hitF = !expanded && fRect?.contains(pos) == true
-                                if (!hitE && !hitF) return@awaitEachGesture
+                // Ruler drag gestures must NOT use a full-screen [pointerInput]: that layer sits
+                // above [GamePlayfield] and intercepts every touch, so taps never create shapes.
+                // Attach the same dock-drag logic only to the FAB and expanded panel surfaces, and
+                // convert local positions to parent coordinates for clamp/snap math.
+                val fabRectRef = rememberUpdatedState(rulerFabHitRect)
+                val expandedRectRef = rememberUpdatedState(rulerExpandedHitRect)
 
-                                val fromExpandedPanel = expanded
-                                val afterSlop = awaitTouchSlopOrCancellation(down.id) { change, _ ->
-                                    change.consume()
-                                }
-                                if (afterSlop == null) {
-                                    if (!fromExpandedPanel) {
-                                        playRulerExpanded = true
-                                    }
-                                    return@awaitEachGesture
-                                }
-
-                                if (fromExpandedPanel) {
-                                    playRulerExpanded = false
-                                }
-
-                                val nums = layoutNumsRef.value
-                                fun clamp(p: Offset) = clampFabCenterDuringDrag(
-                                    p,
-                                    nums.w,
-                                    nums.h,
-                                    nums.insetS,
-                                    nums.insetE,
-                                    nums.insetT,
-                                    nums.insetB,
-                                    nums.fabR,
-                                    nums.edgePad
-                                )
-
-                                rulerDragCenter = clamp(afterSlop.position)
-                                drag(down.id) { change ->
-                                    rulerDragCenter = clamp(change.position)
-                                }
-
-                                val endPos = rulerDragCenter ?: clamp(afterSlop.position)
-                                val exitR = playExitAvoidanceRect(
-                                    nums.w,
-                                    density,
-                                    layoutDirection
-                                )
-                                val (edge, along) = snapDockFromFabCenter(
-                                    endPos.x,
-                                    endPos.y,
-                                    nums.w,
-                                    nums.h,
-                                    nums.insetS,
-                                    nums.insetE,
-                                    nums.insetT,
-                                    nums.insetB,
-                                    nums.fabR,
-                                    nums.edgePad,
-                                    exitR
-                                )
-                                rulerDockEdge = edge
-                                rulerDockAlong = along
-                                rulerDragCenter = null
-                            }
-                        }
-                ) {
+                Box(Modifier.fillMaxSize()) {
                     if (playRulerExpanded) {
                         val panelW =
                             rulerPanelSize.width.takeIf { it > 0 }?.toFloat() ?: estPanelWpx
@@ -1483,7 +1422,71 @@ private fun GameScreen(
                                 }
                                 .onSizeChanged { rulerPanelSize = it }
                                 .wrapContentWidth()
-                                .heightIn(max = maxH),
+                                .heightIn(max = maxH)
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        val rect = expandedRectRef.value ?: return@awaitEachGesture
+                                        fun Offset.toParent() =
+                                            Offset(rect.left + x, rect.top + y)
+                                        val down = awaitFirstDown(
+                                            requireUnconsumed = false,
+                                            pass = PointerEventPass.Final
+                                        )
+                                        val fromExpandedPanel = true
+                                        val afterSlop =
+                                            awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                                                change.consume()
+                                            }
+                                        if (afterSlop == null) {
+                                            if (!fromExpandedPanel) {
+                                                playRulerExpanded = true
+                                            }
+                                            return@awaitEachGesture
+                                        }
+                                        if (fromExpandedPanel) {
+                                            playRulerExpanded = false
+                                        }
+                                        val nums = layoutNumsRef.value
+                                        fun clamp(p: Offset) = clampFabCenterDuringDrag(
+                                            p,
+                                            nums.w,
+                                            nums.h,
+                                            nums.insetS,
+                                            nums.insetE,
+                                            nums.insetT,
+                                            nums.insetB,
+                                            nums.fabR,
+                                            nums.edgePad
+                                        )
+                                        rulerDragCenter = clamp(afterSlop.position.toParent())
+                                        drag(down.id) { change ->
+                                            rulerDragCenter = clamp(change.position.toParent())
+                                        }
+                                        val endPos =
+                                            rulerDragCenter ?: clamp(afterSlop.position.toParent())
+                                        val exitR = playExitAvoidanceRect(
+                                            nums.w,
+                                            density,
+                                            layoutDirection
+                                        )
+                                        val (edge, along) = snapDockFromFabCenter(
+                                            endPos.x,
+                                            endPos.y,
+                                            nums.w,
+                                            nums.h,
+                                            nums.insetS,
+                                            nums.insetE,
+                                            nums.insetT,
+                                            nums.insetB,
+                                            nums.fabR,
+                                            nums.edgePad,
+                                            exitR
+                                        )
+                                        rulerDockEdge = edge
+                                        rulerDockAlong = along
+                                        rulerDragCenter = null
+                                    }
+                                },
                             shape = RoundedCornerShape(22.dp),
                             color = scheme.surfaceContainerHigh,
                             contentColor = scheme.onSurface,
@@ -1539,6 +1542,70 @@ private fun GameScreen(
                                     )
                                 }
                                 .size(56.dp)
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        val rect = fabRectRef.value ?: return@awaitEachGesture
+                                        fun Offset.toParent() =
+                                            Offset(rect.left + x, rect.top + y)
+                                        val down = awaitFirstDown(
+                                            requireUnconsumed = false,
+                                            pass = PointerEventPass.Final
+                                        )
+                                        val fromExpandedPanel = false
+                                        val afterSlop =
+                                            awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                                                change.consume()
+                                            }
+                                        if (afterSlop == null) {
+                                            if (!fromExpandedPanel) {
+                                                playRulerExpanded = true
+                                            }
+                                            return@awaitEachGesture
+                                        }
+                                        if (fromExpandedPanel) {
+                                            playRulerExpanded = false
+                                        }
+                                        val nums = layoutNumsRef.value
+                                        fun clamp(p: Offset) = clampFabCenterDuringDrag(
+                                            p,
+                                            nums.w,
+                                            nums.h,
+                                            nums.insetS,
+                                            nums.insetE,
+                                            nums.insetT,
+                                            nums.insetB,
+                                            nums.fabR,
+                                            nums.edgePad
+                                        )
+                                        rulerDragCenter = clamp(afterSlop.position.toParent())
+                                        drag(down.id) { change ->
+                                            rulerDragCenter = clamp(change.position.toParent())
+                                        }
+                                        val endPos =
+                                            rulerDragCenter ?: clamp(afterSlop.position.toParent())
+                                        val exitR = playExitAvoidanceRect(
+                                            nums.w,
+                                            density,
+                                            layoutDirection
+                                        )
+                                        val (edge, along) = snapDockFromFabCenter(
+                                            endPos.x,
+                                            endPos.y,
+                                            nums.w,
+                                            nums.h,
+                                            nums.insetS,
+                                            nums.insetE,
+                                            nums.insetT,
+                                            nums.insetB,
+                                            nums.fabR,
+                                            nums.edgePad,
+                                            exitR
+                                        )
+                                        rulerDockEdge = edge
+                                        rulerDockAlong = along
+                                        rulerDragCenter = null
+                                    }
+                                }
                                 .semantics {
                                     role = Role.Button
                                     contentDescription = "Show ruler"
@@ -1840,6 +1907,9 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
 
             ToggleRow("Show ruler on play screen", settings.showPlayGameRuler) {
                 scope.launch { repository.updateShowPlayGameRuler(it) }
+            }
+            ToggleRow("Double-tap to open shape menu", settings.doubleTapShapeMenu) {
+                scope.launch { repository.updateDoubleTapShapeMenu(it) }
             }
             ToggleRow("Keep screen on", settings.keepScreenOn) {
                 scope.launch { repository.updateKeepScreenOn(it) }

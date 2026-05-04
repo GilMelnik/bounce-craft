@@ -36,7 +36,9 @@ data class AppSettings(
     /** Tutorial has been shown to the user. */
     val tutorialSeen: Boolean = false,
     /** When true, play mode shows the creation-style ruler (controls + shape pool). */
-    val showPlayGameRuler: Boolean = false
+    val showPlayGameRuler: Boolean = false,
+    /** When true, double-tapping a shape opens its menu (physics pause while open). */
+    val doubleTapShapeMenu: Boolean = false
 )
 
 /** Accessibility label for shape pool toggles (settings and creation ruler). */
