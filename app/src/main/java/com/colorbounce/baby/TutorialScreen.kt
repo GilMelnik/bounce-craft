@@ -18,15 +18,18 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -102,7 +105,16 @@ private val TutorialWindowInsideHeaderHeight = 64.dp
  * Part 4 portrait: cap instruction + menu explanation height so the mini-window stays aligned with
  * Parts 1–3 (scroll inside this slot). Landscape uses a weighted column instead—no cap.
  */
-private val TutorialLongInstructionBodyMaxHeight = 140.dp
+private val TutorialLongInstructionBodyMaxHeight = 168.dp
+
+/** Portrait: gap between the mini-window and the footer (room for menu explanations under the window). */
+private val TutorialPortraitWindowToFooterSpacer = 32.dp
+
+/** Landscape: extra gap below the main row so the footer column clears the screen bottom comfortably. */
+private val TutorialLandscapeOuterBottomSpacer = 36.dp
+
+/** Landscape: inset above the bottom of the left pane so the hint + dots sit off the lower edge. */
+private val TutorialLandscapeFooterLiftFromPaneBottom = 12.dp
 
 @Composable
 fun TutorialScreen(onDismiss: () -> Unit) {
@@ -1015,6 +1027,7 @@ private fun TutorialStepLayout(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .windowInsetsPadding(WindowInsets.navigationBars)
                 .padding(horizontal = 24.dp)
         ) {
             if (isLandscape) {
@@ -1060,6 +1073,7 @@ private fun TutorialStepLayout(
                         )
                         Spacer(Modifier.height(8.dp))
                         TutorialFooter(step = step, hint = footerHint, compact = true)
+                        Spacer(Modifier.height(TutorialLandscapeFooterLiftFromPaneBottom))
                     }
 
                     Spacer(Modifier.width(24.dp))
@@ -1076,7 +1090,7 @@ private fun TutorialStepLayout(
                         content = windowContent
                     )
                 }
-                Spacer(Modifier.height(20.dp))
+                Spacer(Modifier.height(TutorialLandscapeOuterBottomSpacer))
             } else {
                 Column(
                     modifier = Modifier.pointerInput(Unit) {
@@ -1119,10 +1133,10 @@ private fun TutorialStepLayout(
                         detectTapGestures { onOutsideTap() }
                     }
                 ) {
-                    // Fixed spacers so TutorialWindow's weighted height never changes when overlays appear.
-                    Spacer(Modifier.height(20.dp))
+                    // Spacer above footer: separation from mini-window / explanations below the window.
+                    Spacer(Modifier.height(TutorialPortraitWindowToFooterSpacer))
                     TutorialFooter(step = step, hint = footerHint)
-                    Spacer(Modifier.height(110.dp))
+                    Spacer(Modifier.height(12.dp))
                 }
             }
         }
