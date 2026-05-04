@@ -67,6 +67,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -878,7 +879,7 @@ private fun GameScreen(
     var playRulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     var playRulerExpanded by rememberSaveable { mutableStateOf(true) }
     var rulerDockEdge by rememberSaveable { mutableStateOf(RulerDockBottom) }
-    var rulerDockAlong by rememberSaveable { mutableStateOf(0.5f) }
+    var rulerDockAlong by rememberSaveable { mutableFloatStateOf(0.5f) }
     var rulerDragCenter by remember { mutableStateOf<Offset?>(null) }
     var rulerPanelSize by remember { mutableStateOf(IntSize.Zero) }
     var rulerExpandedHitRect by remember { mutableStateOf<Rect?>(null) }

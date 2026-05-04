@@ -33,6 +33,8 @@ import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -67,6 +69,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -563,6 +566,39 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
 }
 
 @Composable
+private fun TutorialDoubleTapToggleRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "Double-tap to open shape menu",
+            color = scheme.onBackground,
+            style = MaterialTheme.typography.bodySmall,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(end = 8.dp)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = scheme.primary,
+                checkedTrackColor = scheme.primaryContainer,
+                uncheckedThumbColor = scheme.outline,
+                uncheckedTrackColor = scheme.surfaceVariant,
+                uncheckedBorderColor = scheme.outline
+            )
+        )
+    }
+}
+
+@Composable
 private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
@@ -573,12 +609,20 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
     var playgroundSize by remember { mutableStateOf(IntSize.Zero) }
     var menuRevealed by rememberSaveable { mutableStateOf(false) }
     var menuSize by remember { mutableStateOf(IntSize.Zero) }
+    var tutorialDoubleTapMenuEnabled by rememberSaveable { mutableStateOf(false) }
 
     val doubleTap = remember { DoubleTapState() }
     val slopPx = with(LocalDensity.current) { 20.dp.toPx() }
 
     val latestMenuRevealed by rememberUpdatedState(menuRevealed)
     val latestShapes by rememberUpdatedState(shapes)
+    val latestTutorialDoubleTapEnabled by rememberUpdatedState(tutorialDoubleTapMenuEnabled)
+
+    LaunchedEffect(tutorialDoubleTapMenuEnabled) {
+        if (!tutorialDoubleTapMenuEnabled) {
+            doubleTap.clear()
+        }
+    }
 
     val infiniteDoubleTap = rememberInfiniteTransition(label = "tutorial_double_tap_shape_menu")
     val doubleTapHandProgress by infiniteDoubleTap.animateFloat(
@@ -620,14 +664,19 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
-        // Keep non-empty so portrait header height stays fixed and the mini window does not move.
-        body = "Double-tap the shape to open its menu.",
+        body = "Double-tap for the shape menu only if that option is on in Settings. Use the switch above the window to try it (does not save).",
         step = 3,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
             "Tap outside the shape and toolbar to finish"
         } else {
             null
+        },
+        aboveMiniWindowContent = {
+            TutorialDoubleTapToggleRow(
+                checked = tutorialDoubleTapMenuEnabled,
+                onCheckedChange = { tutorialDoubleTapMenuEnabled = it }
+            )
         },
         belowBodyContent = if (isLandscape && menuRevealed) {
             { ShapeMenuExplainSection() }
@@ -663,7 +712,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
             }
 
             val shapeForHint = shapes.firstOrNull()
-            if (!menuRevealed && shapeForHint != null) {
+            if (!menuRevealed && tutorialDoubleTapMenuEnabled && shapeForHint != null) {
                 HandHint(
                     modifier = Modifier
                         .fillMaxSize()
@@ -678,7 +727,13 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .zIndex(0.5f)
-                    .pointerInput(menuRevealed, menuSize, playgroundSize, shapes) {
+                    .pointerInput(
+                        menuRevealed,
+                        menuSize,
+                        playgroundSize,
+                        shapes,
+                        tutorialDoubleTapMenuEnabled
+                    ) {
                         awaitPointerEventScope {
                             val downPos = mutableMapOf<Long, Offset>()
                             while (true) {
@@ -689,7 +744,9 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
                                         change.pressed && !change.previousPressed -> {
                                             val p = change.position
                                             val shape = latestShapes.firstOrNull()
-                                            if (!latestMenuRevealed && shape != null) {
+                                            if (!latestMenuRevealed && shape != null &&
+                                                latestTutorialDoubleTapEnabled
+                                            ) {
                                                 val hit = viewModel.shapeAt(p)
                                                 if (hit != null &&
                                                     doubleTap.isSecondTapOnShape(hit.id)
@@ -731,7 +788,9 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
                                             val moved =
                                                 (change.position - start).getDistance() > slopPx
                                             val shape = latestShapes.firstOrNull()
-                                            if (!latestMenuRevealed && shape != null && !moved) {
+                                            if (!latestMenuRevealed && shape != null && !moved &&
+                                                latestTutorialDoubleTapEnabled
+                                            ) {
                                                 val hit = viewModel.shapeAt(change.position)
                                                 if (hit != null) {
                                                     doubleTap.recordShapeTap(hit.id)
@@ -877,6 +936,7 @@ private fun TutorialStepLayout(
     step: Int,
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
+    aboveMiniWindowContent: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     windowContent: @Composable BoxScope.() -> Unit
@@ -954,6 +1014,7 @@ private fun TutorialStepLayout(
                             .padding(vertical = 18.dp),
                         onOutsideTap = onOutsideTap,
                         onBoundsChanged = { tutorialWindowBounds = it },
+                        aboveMiniWindowContent = aboveMiniWindowContent,
                         belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
                     )
@@ -1000,6 +1061,7 @@ private fun TutorialStepLayout(
                         .weight(1f)
                         .fillMaxWidth(),
                     onOutsideTap = onOutsideTap,
+                    aboveMiniWindowContent = aboveMiniWindowContent,
                     belowMiniWindowContent = belowMiniWindowContent,
                     content = windowContent
                 )
@@ -1024,10 +1086,13 @@ private fun TutorialWindow(
     modifier: Modifier,
     onOutsideTap: () -> Unit,
     onBoundsChanged: (Rect) -> Unit = {},
+    aboveMiniWindowContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val aboveMiniSlotHeight = 56.dp
+    val gapAbovePlay = 6.dp
 
     BoxWithConstraints(
         modifier = modifier.onGloballyPositioned { coordinates ->
@@ -1076,6 +1141,22 @@ private fun TutorialWindow(
         ) {
             // No pointerInput here on the container to avoid blocking the content's input
             content()
+        }
+
+        if (aboveMiniWindowContent != null) {
+            val yAbovePlay =
+                ((maxHeight - windowHeight) / 2 - gapAbovePlay - aboveMiniSlotHeight)
+                    .coerceAtLeast(0.dp)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .width(windowWidth)
+                    .offset(y = yAbovePlay)
+                    .height(aboveMiniSlotHeight)
+                    .zIndex(2f)
+            ) {
+                aboveMiniWindowContent()
+            }
         }
 
         // Drawn in a separate layer so layout never recenters the play area above.
