@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -88,6 +89,9 @@ import kotlin.math.sin
 private const val STEP_COUNT = 4
 private const val SUCCESS_ADVANCE_DELAY_MS = 4000L
 private const val FORMATION_ADVANCE_DELAY_MS = 4500L
+
+/** Part 4 only: header band inside the tutorial mini-window (switch row). */
+private val TutorialWindowInsideHeaderHeight = 64.dp
 
 @Composable
 fun TutorialScreen(onDismiss: () -> Unit) {
@@ -579,7 +583,7 @@ private fun TutorialDoubleTapToggleRow(
         Text(
             text = "Double-tap to open shape menu",
             color = scheme.onBackground,
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyLarge,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f).padding(end = 8.dp)
@@ -664,7 +668,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
-        body = "Double-tap for the shape menu only if that option is on in Settings. Use the switch above the window to try it (does not save).",
+        body = "Double-tap for the shape menu only if that option is on in Settings. Use the switch in the top bar of the window to try it (does not save).",
         step = 3,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
@@ -672,7 +676,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
         } else {
             null
         },
-        aboveMiniWindowContent = {
+        insideWindowHeader = {
             TutorialDoubleTapToggleRow(
                 checked = tutorialDoubleTapMenuEnabled,
                 onCheckedChange = { tutorialDoubleTapMenuEnabled = it }
@@ -936,7 +940,7 @@ private fun TutorialStepLayout(
     step: Int,
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
-    aboveMiniWindowContent: (@Composable () -> Unit)? = null,
+    insideWindowHeader: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     windowContent: @Composable BoxScope.() -> Unit
@@ -1014,7 +1018,7 @@ private fun TutorialStepLayout(
                             .padding(vertical = 18.dp),
                         onOutsideTap = onOutsideTap,
                         onBoundsChanged = { tutorialWindowBounds = it },
-                        aboveMiniWindowContent = aboveMiniWindowContent,
+                        insideWindowHeader = insideWindowHeader,
                         belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
                     )
@@ -1061,7 +1065,7 @@ private fun TutorialStepLayout(
                         .weight(1f)
                         .fillMaxWidth(),
                     onOutsideTap = onOutsideTap,
-                    aboveMiniWindowContent = aboveMiniWindowContent,
+                    insideWindowHeader = insideWindowHeader,
                     belowMiniWindowContent = belowMiniWindowContent,
                     content = windowContent
                 )
@@ -1086,13 +1090,11 @@ private fun TutorialWindow(
     modifier: Modifier,
     onOutsideTap: () -> Unit,
     onBoundsChanged: (Rect) -> Unit = {},
-    aboveMiniWindowContent: (@Composable () -> Unit)? = null,
+    insideWindowHeader: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
-    val aboveMiniSlotHeight = 56.dp
-    val gapAbovePlay = 6.dp
 
     BoxWithConstraints(
         modifier = modifier.onGloballyPositioned { coordinates ->
@@ -1112,7 +1114,9 @@ private fun TutorialWindow(
         val maxWindowWidth = maxOf(0.dp, this.maxWidth - outerMargin * 2)
         val maxWindowHeight = maxOf(0.dp, this.maxHeight - outerMargin * 2)
         val windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
-        val windowHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
+        val playAreaHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
+        val headerHeight = if (insideWindowHeader != null) TutorialWindowInsideHeaderHeight else 0.dp
+        val totalWindowHeight = playAreaHeight + headerHeight
 
         // Transparent layer to catch taps outside the mini-window area
         Box(
@@ -1123,11 +1127,11 @@ private fun TutorialWindow(
                 }
         )
 
-        // Rounded play area: always centered alone so it does not shift when extra UI appears.
+        // Rounded window: taller when part 4 includes an inside header (different footprint vs other steps).
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(width = windowWidth, height = windowHeight)
+                .size(width = windowWidth, height = totalWindowHeight)
                 .background(
                     color = scheme.surfaceVariant.copy(alpha = 0.22f),
                     shape = RoundedCornerShape(22.dp)
@@ -1139,29 +1143,42 @@ private fun TutorialWindow(
                 )
                 .padding(12.dp)
         ) {
-            // No pointerInput here on the container to avoid blocking the content's input
-            content()
-        }
-
-        if (aboveMiniWindowContent != null) {
-            val yAbovePlay =
-                ((maxHeight - windowHeight) / 2 - gapAbovePlay - aboveMiniSlotHeight)
-                    .coerceAtLeast(0.dp)
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .width(windowWidth)
-                    .offset(y = yAbovePlay)
-                    .height(aboveMiniSlotHeight)
-                    .zIndex(2f)
-            ) {
-                aboveMiniWindowContent()
+            if (insideWindowHeader != null) {
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(headerHeight)
+                            .background(
+                                color = scheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                            )
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        insideWindowHeader()
+                    }
+                    HorizontalDivider(
+                        color = scheme.outline.copy(alpha = 0.45f),
+                        thickness = 1.dp
+                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(scheme.surface.copy(alpha = 0.08f))
+                    ) {
+                        content()
+                    }
+                }
+            } else {
+                content()
             }
         }
 
         // Drawn in a separate layer so layout never recenters the play area above.
         if (belowMiniWindowContent != null) {
-            val explainTop = maxHeight / 2 + windowHeight / 2 + 8.dp
+            val explainTop = maxHeight / 2 + totalWindowHeight / 2 + 8.dp
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
