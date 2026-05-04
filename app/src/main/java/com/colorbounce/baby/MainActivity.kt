@@ -82,6 +82,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
@@ -780,6 +781,38 @@ private fun clampFabCenterDuringDrag(
     )
 }
 
+/** Minimized ruler: full play-area drag; only [snapDockFromFabCenter] pins to an edge on release. */
+private fun clampFabCenterFreeDrag(
+    pos: Offset,
+    w: Float,
+    h: Float,
+    insetS: Float,
+    insetE: Float,
+    insetT: Float,
+    insetB: Float,
+    fabR: Float
+): Offset {
+    val minX = insetS + fabR
+    val maxX = w - insetE - fabR
+    val minY = insetT + fabR
+    val maxY = h - insetB - fabR
+    return Offset(
+        pos.x.coerceIn(minX, maxX),
+        pos.y.coerceIn(minY, maxY)
+    )
+}
+
+private fun fingerInPlayArea(
+    fabCoords: LayoutCoordinates?,
+    playAreaCoords: LayoutCoordinates?,
+    fabLocal: Offset
+): Offset? {
+    val fab = fabCoords ?: return null
+    val area = playAreaCoords ?: return null
+    if (!fab.isAttached || !area.isAttached) return null
+    return area.localPositionOf(fab, fabLocal)
+}
+
 private data class RulerLayoutNumbers(
     val w: Float,
     val h: Float,
@@ -849,7 +882,10 @@ private fun GameScreen(
     var rulerDragCenter by remember { mutableStateOf<Offset?>(null) }
     var rulerPanelSize by remember { mutableStateOf(IntSize.Zero) }
     var rulerExpandedHitRect by remember { mutableStateOf<Rect?>(null) }
-    var rulerFabHitRect by remember { mutableStateOf<Rect?>(null) }
+    var playAreaLayoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var fabSurfaceLayoutCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val playAreaLayoutRef = rememberUpdatedState(playAreaLayoutCoords)
+    val fabLayoutRef = rememberUpdatedState(fabSurfaceLayoutCoords)
     val contextMenuIdRef = rememberUpdatedState(contextMenuShapeId)
     val doubleTap = remember { DoubleTapState() }
     val slopPx = with(LocalDensity.current) { 20.dp.toPx() }
@@ -921,7 +957,7 @@ private fun GameScreen(
         if (!playRulerExpanded) {
             rulerExpandedHitRect = null
         } else {
-            rulerFabHitRect = null
+            fabSurfaceLayoutCoords = null
         }
     }
 
@@ -1382,10 +1418,13 @@ private fun GameScreen(
                 // above [GamePlayfield] and intercepts every touch, so taps never create shapes.
                 // Attach the same dock-drag logic only to the FAB and expanded panel surfaces, and
                 // convert local positions to parent coordinates for clamp/snap math.
-                val fabRectRef = rememberUpdatedState(rulerFabHitRect)
                 val expandedRectRef = rememberUpdatedState(rulerExpandedHitRect)
 
-                Box(Modifier.fillMaxSize()) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .onGloballyPositioned { playAreaLayoutCoords = it }
+                ) {
                     if (playRulerExpanded) {
                         val panelW =
                             rulerPanelSize.width.takeIf { it > 0 }?.toFloat() ?: estPanelWpx
@@ -1532,41 +1571,18 @@ private fun GameScreen(
                                     )
                                 }
                                 .onGloballyPositioned { coords ->
-                                    val p = coords.positionInParent()
-                                    val s = coords.size
-                                    rulerFabHitRect = Rect(
-                                        p.x,
-                                        p.y,
-                                        p.x + s.width,
-                                        p.y + s.height
-                                    )
+                                    fabSurfaceLayoutCoords = coords
                                 }
                                 .size(56.dp)
                                 .pointerInput(Unit) {
                                     awaitEachGesture {
-                                        val rect = fabRectRef.value ?: return@awaitEachGesture
-                                        fun Offset.toParent() =
-                                            Offset(rect.left + x, rect.top + y)
-                                        val down = awaitFirstDown(
-                                            requireUnconsumed = false,
-                                            pass = PointerEventPass.Final
-                                        )
-                                        val fromExpandedPanel = false
-                                        val afterSlop =
-                                            awaitTouchSlopOrCancellation(down.id) { change, _ ->
-                                                change.consume()
-                                            }
-                                        if (afterSlop == null) {
-                                            if (!fromExpandedPanel) {
-                                                playRulerExpanded = true
-                                            }
-                                            return@awaitEachGesture
-                                        }
-                                        if (fromExpandedPanel) {
-                                            playRulerExpanded = false
-                                        }
                                         val nums = layoutNumsRef.value
-                                        fun clamp(p: Offset) = clampFabCenterDuringDrag(
+                                        fun playPos(local: Offset) = fingerInPlayArea(
+                                            fabLayoutRef.value,
+                                            playAreaLayoutRef.value,
+                                            local
+                                        )
+                                        fun clampFree(p: Offset) = clampFabCenterFreeDrag(
                                             p,
                                             nums.w,
                                             nums.h,
@@ -1574,15 +1590,29 @@ private fun GameScreen(
                                             nums.insetE,
                                             nums.insetT,
                                             nums.insetB,
-                                            nums.fabR,
-                                            nums.edgePad
+                                            nums.fabR
                                         )
-                                        rulerDragCenter = clamp(afterSlop.position.toParent())
+                                        val down = awaitFirstDown(
+                                            requireUnconsumed = false,
+                                            pass = PointerEventPass.Final
+                                        )
+                                        val afterSlop =
+                                            awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                                                change.consume()
+                                            }
+                                        if (afterSlop == null) {
+                                            playRulerExpanded = true
+                                            return@awaitEachGesture
+                                        }
+                                        val start =
+                                            playPos(afterSlop.position) ?: return@awaitEachGesture
+                                        rulerDragCenter = clampFree(start)
                                         drag(down.id) { change ->
-                                            rulerDragCenter = clamp(change.position.toParent())
+                                            val p = playPos(change.position) ?: return@drag
+                                            rulerDragCenter = clampFree(p)
                                         }
                                         val endPos =
-                                            rulerDragCenter ?: clamp(afterSlop.position.toParent())
+                                            rulerDragCenter ?: clampFree(start)
                                         val exitR = playExitAvoidanceRect(
                                             nums.w,
                                             density,
