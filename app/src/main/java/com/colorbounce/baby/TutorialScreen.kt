@@ -9,6 +9,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -30,6 +33,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.Timer
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +75,7 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -92,6 +97,12 @@ private const val FORMATION_ADVANCE_DELAY_MS = 4500L
 
 /** Part 4 only: header band inside the tutorial mini-window (switch row). */
 private val TutorialWindowInsideHeaderHeight = 64.dp
+
+/**
+ * Part 4 portrait: cap instruction + menu explanation height so the mini-window stays aligned with
+ * Parts 1–3 (scroll inside this slot). Landscape uses a weighted column instead—no cap.
+ */
+private val TutorialLongInstructionBodyMaxHeight = 140.dp
 
 @Composable
 fun TutorialScreen(onDismiss: () -> Unit) {
@@ -668,8 +679,9 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
-        body = "Double-tap for the shape menu only if that option is on in Settings. Use the switch in the top bar of the window to try it (does not save).",
+        body = "Switch the setting to allow Double-tap for the shape menu.",
         step = 3,
+        instructionBodyMaxHeight = TutorialLongInstructionBodyMaxHeight,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
             "Tap outside the shape and toolbar to finish"
@@ -934,12 +946,57 @@ private fun ShapeMenuExplainRow(
 }
 
 @Composable
+private fun TutorialInstructionBodyColumn(
+    modifier: Modifier = Modifier.fillMaxWidth(),
+    body: String,
+    textAlign: TextAlign,
+    scheme: ColorScheme,
+    maxHeight: Dp?,
+    belowBodyContent: (@Composable () -> Unit)?,
+    wrapBelowBodyInFillWidthColumn: Boolean
+) {
+    if (body.isBlank() && belowBodyContent == null) return
+    val scrollState = rememberScrollState()
+    @Composable
+    fun Inner() {
+        if (body.isNotBlank()) {
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodyLarge,
+                color = scheme.onBackground,
+                textAlign = textAlign,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (belowBodyContent != null) {
+            if (body.isNotBlank()) {
+                Spacer(Modifier.height(16.dp))
+            }
+            if (wrapBelowBodyInFillWidthColumn) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    belowBodyContent()
+                }
+            } else {
+                belowBodyContent()
+            }
+        }
+    }
+    val scrollableModifier = modifier
+        .then(if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
+        .verticalScroll(scrollState)
+    Column(modifier = scrollableModifier) {
+        Inner()
+    }
+}
+
+@Composable
 private fun TutorialStepLayout(
     title: String,
     body: String,
     step: Int,
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
+    instructionBodyMaxHeight: Dp? = null,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
@@ -990,23 +1047,19 @@ private fun TutorialStepLayout(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(16.dp))
-                        if (body.isNotBlank()) {
-                            Text(
-                                text = body,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = scheme.onBackground,
-                                textAlign = TextAlign.Start,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                        if (belowBodyContent != null) {
-                            if (body.isNotBlank()) {
-                                Spacer(Modifier.height(16.dp))
-                            }
-                            belowBodyContent()
-                        }
-                        Spacer(Modifier.height(20.dp))
-                        TutorialFooter(step = step, hint = footerHint)
+                        TutorialInstructionBodyColumn(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            body = body,
+                            textAlign = TextAlign.Start,
+                            scheme = scheme,
+                            maxHeight = null,
+                            belowBodyContent = belowBodyContent,
+                            wrapBelowBodyInFillWidthColumn = false
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        TutorialFooter(step = step, hint = footerHint, compact = true)
                     }
 
                     Spacer(Modifier.width(24.dp))
@@ -1040,23 +1093,14 @@ private fun TutorialStepLayout(
                         modifier = Modifier.fillMaxWidth()
                     )
                     Spacer(Modifier.height(16.dp))
-                    if (body.isNotBlank()) {
-                        Text(
-                            text = body,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = scheme.onBackground,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    if (belowBodyContent != null) {
-                        if (body.isNotBlank()) {
-                            Spacer(Modifier.height(16.dp))
-                        }
-                        Column(modifier = Modifier.fillMaxWidth()) {
-                            belowBodyContent()
-                        }
-                    }
+                    TutorialInstructionBodyColumn(
+                        body = body,
+                        textAlign = TextAlign.Center,
+                        scheme = scheme,
+                        maxHeight = instructionBodyMaxHeight,
+                        belowBodyContent = belowBodyContent,
+                        wrapBelowBodyInFillWidthColumn = true
+                    )
                     Spacer(Modifier.height(40.dp))
                 }
 
@@ -1076,7 +1120,7 @@ private fun TutorialStepLayout(
                     }
                 ) {
                     // Fixed spacers so TutorialWindow's weighted height never changes when overlays appear.
-                    Spacer(Modifier.height(30.dp))
+                    Spacer(Modifier.height(20.dp))
                     TutorialFooter(step = step, hint = footerHint)
                     Spacer(Modifier.height(110.dp))
                 }
@@ -1193,25 +1237,32 @@ private fun TutorialWindow(
 }
 
 @Composable
-private fun TutorialFooter(step: Int, hint: String? = null) {
+private fun TutorialFooter(step: Int, hint: String? = null, compact: Boolean = false) {
     val scheme = MaterialTheme.colorScheme
+    val hintStyle =
+        if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall
+    val hintTopMinLines = if (compact) 1 else 2
+    val hintTopMaxLines = 2
+    val gapHintToDots = if (compact) 6.dp else 12.dp
+    val dotGap = if (compact) 14.dp else 18.dp
+    val dotRadius = if (compact) 4.dp else 5.dp
+    val dotsCanvasHeight = if (compact) 8.dp else 10.dp
+    val indicatorWidth = dotGap * (STEP_COUNT - 1) + dotRadius * 2
 
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text(
             text = hint ?: "Tap outside the window to skip this part",
-            style = MaterialTheme.typography.bodySmall,
+            style = hintStyle,
             color = scheme.onBackground.copy(alpha = 0.6f),
             textAlign = TextAlign.Center,
-            minLines = 2,
-            maxLines = 2,
+            minLines = hintTopMinLines,
+            maxLines = hintTopMaxLines,
             modifier = Modifier.fillMaxWidth()
         )
-        Spacer(Modifier.height(12.dp))
-        val dotGapPx = 18.dp
-        val indicatorWidth = dotGapPx * (STEP_COUNT - 1) + 12.dp * 2
-        Canvas(modifier = Modifier.size(width = indicatorWidth, height = 10.dp)) {
-            val radius = 5.dp.toPx()
-            val gap = dotGapPx.toPx()
+        Spacer(Modifier.height(gapHintToDots))
+        Canvas(modifier = Modifier.size(width = indicatorWidth, height = dotsCanvasHeight)) {
+            val radius = dotRadius.toPx()
+            val gap = dotGap.toPx()
             repeat(STEP_COUNT) { index ->
                 val x = radius + index * gap
                 drawCircle(
