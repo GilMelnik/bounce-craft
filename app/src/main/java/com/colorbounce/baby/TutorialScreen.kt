@@ -119,11 +119,15 @@ private val TutorialLandscapeFooterLiftFromPaneBottom = 12.dp
 @Composable
 fun TutorialScreen(onDismiss: () -> Unit) {
     var currentStep by rememberSaveable { mutableIntStateOf(0) }
+    /** Prevents double completion (rapid taps / overlapping gestures) from firing [onDismiss] twice. */
+    var finishDispatched by remember { mutableStateOf(false) }
 
     fun nextStep() {
+        if (finishDispatched) return
         if (currentStep < STEP_COUNT - 1) {
             currentStep += 1
         } else {
+            finishDispatched = true
             onDismiss()
         }
     }

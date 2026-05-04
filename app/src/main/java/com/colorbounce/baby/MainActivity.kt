@@ -332,6 +332,7 @@ private fun ColorBounceApp(
                     }
                     if (tutorialExitTarget == "game") {
                         navController.navigate("game") {
+                            launchSingleTop = true
                             popUpTo("tutorial") { inclusive = true }
                         }
                     } else {
