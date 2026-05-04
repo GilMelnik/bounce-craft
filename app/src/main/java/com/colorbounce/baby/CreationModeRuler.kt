@@ -77,6 +77,9 @@ private fun rulerExpandedPanelWidth(isSideBar: Boolean): Dp =
             RulerStripInnerHorizontalPadding + RulerColumnHorizontalPadding
     }
 
+/** Width of the floating play-mode ruler column (for screen placement). */
+fun rulerFloatingPlayPanelWidth(): Dp = rulerExpandedPanelWidth(isSideBar = false)
+
 @Composable
 fun CreationModeRuler(
     session: CreationSession,

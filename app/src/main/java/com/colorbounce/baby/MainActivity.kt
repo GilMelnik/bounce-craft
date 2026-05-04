@@ -12,6 +12,10 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,11 +27,12 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.rememberScrollState
@@ -75,16 +80,26 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -601,6 +616,221 @@ private fun AboutScreen(onBack: () -> Unit) {
     }
 }
 
+private const val RulerDockBottom = "bottom"
+private const val RulerDockTop = "top"
+private const val RulerDockLeft = "left"
+private const val RulerDockRight = "right"
+
+private fun playExitAvoidanceRect(
+    w: Float,
+    density: Density,
+    layoutDirection: LayoutDirection
+): Rect {
+    val top = with(density) { 24.dp.toPx() }
+    val sidePad = with(density) { 16.dp.toPx() }
+    val sz = with(density) { 34.dp.toPx() }
+    val m = with(density) { 10.dp.toPx() }
+    return if (layoutDirection == LayoutDirection.Ltr) {
+        Rect(w - sidePad - sz - m, top - m, w + m, top + sz + m)
+    } else {
+        Rect(-m, top - m, sidePad + sz + m, top + sz + m)
+    }
+}
+
+private fun circleOverlapsRect(cx: Float, cy: Float, r: Float, rect: Rect): Boolean {
+    val closestX = cx.coerceIn(rect.left, rect.right)
+    val closestY = cy.coerceIn(rect.top, rect.bottom)
+    val dx = cx - closestX
+    val dy = cy - closestY
+    return dx * dx + dy * dy < r * r
+}
+
+private fun rectOverlaps(a: Rect, b: Rect): Boolean =
+    a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top
+
+private fun slideFabOnEdgeClearExit(
+    edge: String,
+    x: Float,
+    y: Float,
+    fabR: Float,
+    exit: Rect,
+    innerLeft: Float,
+    innerRight: Float,
+    innerTop: Float,
+    innerBottom: Float
+): Offset {
+    if (!circleOverlapsRect(x, y, fabR, exit)) return Offset(x, y)
+    when (edge) {
+        RulerDockBottom, RulerDockTop -> {
+            val steps = 256
+            for (j in 0..steps) {
+                val t = j / steps.toFloat()
+                val cx = innerLeft + t * (innerRight - innerLeft)
+                if (!circleOverlapsRect(cx, y, fabR, exit)) return Offset(cx, y)
+            }
+            for (j in steps downTo 0) {
+                val t = j / steps.toFloat()
+                val cx = innerLeft + t * (innerRight - innerLeft)
+                if (!circleOverlapsRect(cx, y, fabR, exit)) return Offset(cx, y)
+            }
+        }
+        RulerDockLeft, RulerDockRight -> {
+            val steps = 256
+            for (j in 0..steps) {
+                val t = j / steps.toFloat()
+                val cy = innerTop + t * (innerBottom - innerTop)
+                if (!circleOverlapsRect(x, cy, fabR, exit)) return Offset(x, cy)
+            }
+        }
+    }
+    return Offset(x, y)
+}
+
+private fun fabCenterFromDock(
+    edge: String,
+    along: Float,
+    w: Float,
+    h: Float,
+    insetS: Float,
+    insetE: Float,
+    insetT: Float,
+    insetB: Float,
+    fabR: Float,
+    edgePad: Float,
+    exit: Rect
+): Offset {
+    val innerLeft = insetS + fabR + edgePad
+    val innerRight = w - insetE - fabR - edgePad
+    val innerTop = insetT + fabR + edgePad
+    val innerBottom = h - insetB - fabR - edgePad
+    val spanX = (innerRight - innerLeft).coerceAtLeast(1f)
+    val spanY = (innerBottom - innerTop).coerceAtLeast(1f)
+    val t = along.coerceIn(0f, 1f)
+    val (cx, cy) = when (edge) {
+        RulerDockBottom -> innerLeft + t * spanX to innerBottom
+        RulerDockTop -> innerLeft + t * spanX to innerTop
+        RulerDockLeft -> innerLeft to innerTop + t * spanY
+        RulerDockRight -> innerRight to innerTop + t * spanY
+        else -> innerLeft + 0.5f * spanX to innerBottom
+    }
+    return slideFabOnEdgeClearExit(edge, cx, cy, fabR, exit, innerLeft, innerRight, innerTop, innerBottom)
+}
+
+private fun snapDockFromFabCenter(
+    cx: Float,
+    cy: Float,
+    w: Float,
+    h: Float,
+    insetS: Float,
+    insetE: Float,
+    insetT: Float,
+    insetB: Float,
+    fabR: Float,
+    edgePad: Float,
+    exit: Rect
+): Pair<String, Float> {
+    val innerLeft = insetS + fabR + edgePad
+    val innerRight = w - insetE - fabR - edgePad
+    val innerTop = insetT + fabR + edgePad
+    val innerBottom = h - insetB - fabR - edgePad
+    val dLeft = cx - innerLeft
+    val dRight = innerRight - cx
+    val dTop = cy - innerTop
+    val dBottom = innerBottom - cy
+    val edge = when {
+        dLeft <= dRight && dLeft <= dTop && dLeft <= dBottom -> RulerDockLeft
+        dRight <= dTop && dRight <= dBottom -> RulerDockRight
+        dTop <= dBottom -> RulerDockTop
+        else -> RulerDockBottom
+    }
+    val (rawX, rawY) = when (edge) {
+        RulerDockLeft -> innerLeft to cy.coerceIn(innerTop, innerBottom)
+        RulerDockRight -> innerRight to cy.coerceIn(innerTop, innerBottom)
+        RulerDockTop -> cx.coerceIn(innerLeft, innerRight) to innerTop
+        else -> cx.coerceIn(innerLeft, innerRight) to innerBottom
+    }
+    val nudged = slideFabOnEdgeClearExit(edge, rawX, rawY, fabR, exit, innerLeft, innerRight, innerTop, innerBottom)
+    val along = when (edge) {
+        RulerDockLeft, RulerDockRight ->
+            ((nudged.y - innerTop) / (innerBottom - innerTop).coerceAtLeast(1e-3f)).coerceIn(0f, 1f)
+        else ->
+            ((nudged.x - innerLeft) / (innerRight - innerLeft).coerceAtLeast(1e-3f)).coerceIn(0f, 1f)
+    }
+    return edge to along
+}
+
+private fun clampFabCenterDuringDrag(
+    pos: Offset,
+    w: Float,
+    h: Float,
+    insetS: Float,
+    insetE: Float,
+    insetT: Float,
+    insetB: Float,
+    fabR: Float,
+    edgePad: Float
+): Offset {
+    val innerLeft = insetS + fabR + edgePad
+    val innerRight = w - insetE - fabR - edgePad
+    val innerTop = insetT + fabR + edgePad
+    val innerBottom = h - insetB - fabR - edgePad
+    return Offset(
+        pos.x.coerceIn(innerLeft, innerRight),
+        pos.y.coerceIn(innerTop, innerBottom)
+    )
+}
+
+private data class RulerLayoutNumbers(
+    val w: Float,
+    val h: Float,
+    val insetS: Float,
+    val insetE: Float,
+    val insetT: Float,
+    val insetB: Float,
+    val fabR: Float,
+    val edgePad: Float
+)
+
+private fun expandedRulerTopLeft(
+    fabCenter: Offset,
+    fabR: Float,
+    panelW: Float,
+    panelH: Float,
+    gap: Float,
+    pad: Float,
+    w: Float,
+    h: Float,
+    exit: Rect
+): Offset {
+    var left = fabCenter.x - panelW / 2f
+    left = left.coerceIn(pad, (w - panelW - pad).coerceAtLeast(pad))
+    fun panelRect(top: Float) = Rect(left, top, left + panelW, top + panelH)
+
+    var top = fabCenter.y - fabR - gap - panelH
+    var pr = panelRect(top)
+    if (top >= pad && !rectOverlaps(pr, exit)) {
+        return Offset(left, top)
+    }
+    top = fabCenter.y + fabR + gap
+    left = fabCenter.x - panelW / 2f
+    left = left.coerceIn(pad, (w - panelW - pad).coerceAtLeast(pad))
+    pr = panelRect(top)
+    if (top + panelH <= h - pad && !rectOverlaps(pr, exit)) {
+        return Offset(left, top)
+    }
+    var shift = 0f
+    repeat(24) {
+        shift += 28f
+        left = fabCenter.x - panelW / 2f - shift
+        left = left.coerceIn(pad, (w - panelW - pad).coerceAtLeast(pad))
+        top = fabCenter.y - fabR - gap - panelH
+        if (top >= pad && !rectOverlaps(panelRect(top), exit)) return Offset(left, top)
+    }
+    left = pad
+    top = (exit.bottom + pad).coerceAtMost(h - panelH - pad).coerceAtLeast(pad)
+    return Offset(left, top)
+}
+
 @Composable
 private fun GameScreen(
     settings: AppSettings,
@@ -614,6 +844,12 @@ private fun GameScreen(
     val scope = rememberCoroutineScope()
     var playRulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     var playRulerExpanded by rememberSaveable { mutableStateOf(true) }
+    var rulerDockEdge by rememberSaveable { mutableStateOf(RulerDockBottom) }
+    var rulerDockAlong by rememberSaveable { mutableStateOf(0.5f) }
+    var rulerDragCenter by remember { mutableStateOf<Offset?>(null) }
+    var rulerPanelSize by remember { mutableStateOf(IntSize.Zero) }
+    var rulerExpandedHitRect by remember { mutableStateOf<Rect?>(null) }
+    var rulerFabHitRect by remember { mutableStateOf<Rect?>(null) }
     val contextMenuIdRef = rememberUpdatedState(contextMenuShapeId)
     val doubleTap = remember { DoubleTapState() }
     val slopPx = with(LocalDensity.current) { 20.dp.toPx() }
@@ -676,6 +912,14 @@ private fun GameScreen(
 
     val onSurfaceVariant = MaterialTheme.colorScheme.onSurfaceVariant
     val exitButtonBg = MaterialTheme.colorScheme.surfaceVariant
+
+    LaunchedEffect(playRulerExpanded) {
+        if (!playRulerExpanded) {
+            rulerExpandedHitRect = null
+        } else {
+            rulerFabHitRect = null
+        }
+    }
 
     LaunchedEffect(
         settings.shapeTimeoutSeconds,
@@ -1063,6 +1307,12 @@ private fun GameScreen(
         }
 
         if (settings.showPlayGameRuler) {
+            val density = LocalDensity.current
+            val layoutDirection = LocalLayoutDirection.current
+            val expandedRef = rememberUpdatedState(playRulerExpanded)
+            val expandedHitRef = rememberUpdatedState(rulerExpandedHitRect)
+            val fabHitRef = rememberUpdatedState(rulerFabHitRect)
+
             BoxWithConstraints(
                 Modifier
                     .fillMaxSize()
@@ -1070,64 +1320,238 @@ private fun GameScreen(
             ) {
                 val scheme = MaterialTheme.colorScheme
                 val maxH = (this@BoxWithConstraints.maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
-                if (playRulerExpanded) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .wrapContentWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 8.dp, vertical = 8.dp)
-                            .heightIn(max = maxH),
-                        shape = RoundedCornerShape(22.dp),
-                        color = scheme.surfaceContainerHigh,
-                        contentColor = scheme.onSurface,
-                        shadowElevation = 4.dp,
-                        tonalElevation = 2.dp
-                    ) {
-                        CreationModeRuler(
-                            session = playRulerSession,
-                            onSessionChange = { newSession ->
-                                if (newSession.newShapesPinned != playRulerSession.newShapesPinned) {
-                                    viewModel.applyGlobalPinFromRuler(newSession.newShapesPinned)
+
+                val wPx = with(density) { maxWidth.toPx() }
+                val hPx = with(density) { maxHeight.toPx() }
+                val fabHalfPx = with(density) { 28.dp.toPx() }
+                val edgePadPx = with(density) { 8.dp.toPx() }
+                val layoutPadPx = with(density) { 8.dp.toPx() }
+                val panelGapPx = with(density) { 10.dp.toPx() }
+                val safePad = WindowInsets.safeDrawing.asPaddingValues()
+                val topInsetPx = with(density) { safePad.calculateTopPadding().toPx() }
+                val bottomInsetPx = with(density) { safePad.calculateBottomPadding().toPx() }
+                val startInsetPx = with(density) {
+                    safePad.calculateLeftPadding(layoutDirection).toPx()
+                }
+                val endInsetPx = with(density) {
+                    safePad.calculateRightPadding(layoutDirection).toPx()
+                }
+
+                val layoutNums = RulerLayoutNumbers(
+                    w = wPx,
+                    h = hPx,
+                    insetS = startInsetPx,
+                    insetE = endInsetPx,
+                    insetT = topInsetPx,
+                    insetB = bottomInsetPx,
+                    fabR = fabHalfPx,
+                    edgePad = edgePadPx
+                )
+                val layoutNumsRef = rememberUpdatedState(layoutNums)
+
+                val exitRect = remember(wPx, hPx, density, layoutDirection) {
+                    playExitAvoidanceRect(wPx, density, layoutDirection)
+                }
+
+                val estPanelWpx = with(density) { rulerFloatingPlayPanelWidth().toPx() }
+                val maxHPx = with(density) { maxH.toPx() }
+
+                fun dockedFab(): Offset = fabCenterFromDock(
+                    rulerDockEdge,
+                    rulerDockAlong,
+                    wPx,
+                    hPx,
+                    startInsetPx,
+                    endInsetPx,
+                    topInsetPx,
+                    bottomInsetPx,
+                    fabHalfPx,
+                    edgePadPx,
+                    exitRect
+                )
+
+                val fabCenter = rulerDragCenter ?: dockedFab()
+
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(
+                                    requireUnconsumed = false,
+                                    pass = PointerEventPass.Final
+                                )
+                                val pos = down.position
+                                val expanded = expandedRef.value
+                                val eRect = expandedHitRef.value
+                                val fRect = fabHitRef.value
+                                val hitE = expanded && eRect?.contains(pos) == true
+                                val hitF = !expanded && fRect?.contains(pos) == true
+                                if (!hitE && !hitF) return@awaitEachGesture
+
+                                val fromExpandedPanel = expanded
+                                val afterSlop = awaitTouchSlopOrCancellation(down.id) { change, _ ->
+                                    change.consume()
                                 }
-                                if (newSession.newShapesImmortal != playRulerSession.newShapesImmortal) {
-                                    viewModel.applyGlobalImmortalFromRuler(newSession.newShapesImmortal)
-                                    scope.launch {
-                                        repository.updateShapeTimeoutImmortal(newSession.newShapesImmortal)
+                                if (afterSlop == null) {
+                                    if (!fromExpandedPanel) {
+                                        playRulerExpanded = true
                                     }
+                                    return@awaitEachGesture
                                 }
-                                if (newSession.selectedShapes != playRulerSession.selectedShapes) {
-                                    scope.launch { repository.updateSelectedShapes(newSession.selectedShapes) }
+
+                                if (fromExpandedPanel) {
+                                    playRulerExpanded = false
                                 }
-                                if (newSession.shapeSelectionMode != playRulerSession.shapeSelectionMode) {
-                                    scope.launch {
-                                        repository.updateShapeSelectionMode(newSession.shapeSelectionMode)
-                                    }
+
+                                val nums = layoutNumsRef.value
+                                fun clamp(p: Offset) = clampFabCenterDuringDrag(
+                                    p,
+                                    nums.w,
+                                    nums.h,
+                                    nums.insetS,
+                                    nums.insetE,
+                                    nums.insetT,
+                                    nums.insetB,
+                                    nums.fabR,
+                                    nums.edgePad
+                                )
+
+                                rulerDragCenter = clamp(afterSlop.position)
+                                drag(down.id) { change ->
+                                    rulerDragCenter = clamp(change.position)
                                 }
-                                playRulerSession = newSession
-                            },
-                            onCollapse = { playRulerExpanded = false },
-                            isSideBar = false,
-                            maxHeight = maxH
+
+                                val endPos = rulerDragCenter ?: clamp(afterSlop.position)
+                                val exitR = playExitAvoidanceRect(
+                                    nums.w,
+                                    density,
+                                    layoutDirection
+                                )
+                                val (edge, along) = snapDockFromFabCenter(
+                                    endPos.x,
+                                    endPos.y,
+                                    nums.w,
+                                    nums.h,
+                                    nums.insetS,
+                                    nums.insetE,
+                                    nums.insetT,
+                                    nums.insetB,
+                                    nums.fabR,
+                                    nums.edgePad,
+                                    exitR
+                                )
+                                rulerDockEdge = edge
+                                rulerDockAlong = along
+                                rulerDragCenter = null
+                            }
+                        }
+                ) {
+                    if (playRulerExpanded) {
+                        val panelW =
+                            rulerPanelSize.width.takeIf { it > 0 }?.toFloat() ?: estPanelWpx
+                        val panelH =
+                            rulerPanelSize.height.takeIf { it > 0 }?.toFloat() ?: maxHPx
+                        val topLeft = expandedRulerTopLeft(
+                            fabCenter,
+                            fabHalfPx,
+                            panelW,
+                            panelH,
+                            panelGapPx,
+                            layoutPadPx,
+                            wPx,
+                            hPx,
+                            exitRect
                         )
-                    }
-                } else {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .navigationBarsPadding()
-                            .padding(bottom = 16.dp)
-                            .size(56.dp),
-                        shape = CircleShape,
-                        color = scheme.secondaryContainer,
-                        shadowElevation = 4.dp,
-                        tonalElevation = 2.dp
-                    ) {
-                        Box(
-                            Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                        Surface(
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(
+                                        topLeft.x.roundToInt(),
+                                        topLeft.y.roundToInt()
+                                    )
+                                }
+                                .onGloballyPositioned { coords ->
+                                    val p = coords.positionInParent()
+                                    val s = coords.size
+                                    rulerExpandedHitRect = Rect(
+                                        p.x,
+                                        p.y,
+                                        p.x + s.width,
+                                        p.y + s.height
+                                    )
+                                }
+                                .onSizeChanged { rulerPanelSize = it }
+                                .wrapContentWidth()
+                                .heightIn(max = maxH),
+                            shape = RoundedCornerShape(22.dp),
+                            color = scheme.surfaceContainerHigh,
+                            contentColor = scheme.onSurface,
+                            shadowElevation = 4.dp,
+                            tonalElevation = 2.dp
                         ) {
-                            IconButton(onClick = { playRulerExpanded = true }) {
+                            CreationModeRuler(
+                                session = playRulerSession,
+                                onSessionChange = { newSession ->
+                                    if (newSession.newShapesPinned != playRulerSession.newShapesPinned) {
+                                        viewModel.applyGlobalPinFromRuler(newSession.newShapesPinned)
+                                    }
+                                    if (newSession.newShapesImmortal != playRulerSession.newShapesImmortal) {
+                                        viewModel.applyGlobalImmortalFromRuler(newSession.newShapesImmortal)
+                                        scope.launch {
+                                            repository.updateShapeTimeoutImmortal(newSession.newShapesImmortal)
+                                        }
+                                    }
+                                    if (newSession.selectedShapes != playRulerSession.selectedShapes) {
+                                        scope.launch {
+                                            repository.updateSelectedShapes(newSession.selectedShapes)
+                                        }
+                                    }
+                                    if (newSession.shapeSelectionMode != playRulerSession.shapeSelectionMode) {
+                                        scope.launch {
+                                            repository.updateShapeSelectionMode(newSession.shapeSelectionMode)
+                                        }
+                                    }
+                                    playRulerSession = newSession
+                                },
+                                onCollapse = { playRulerExpanded = false },
+                                isSideBar = false,
+                                maxHeight = maxH
+                            )
+                        }
+                    } else {
+                        Surface(
+                            modifier = Modifier
+                                .offset {
+                                    IntOffset(
+                                        (fabCenter.x - fabHalfPx).roundToInt(),
+                                        (fabCenter.y - fabHalfPx).roundToInt()
+                                    )
+                                }
+                                .onGloballyPositioned { coords ->
+                                    val p = coords.positionInParent()
+                                    val s = coords.size
+                                    rulerFabHitRect = Rect(
+                                        p.x,
+                                        p.y,
+                                        p.x + s.width,
+                                        p.y + s.height
+                                    )
+                                }
+                                .size(56.dp)
+                                .semantics {
+                                    role = Role.Button
+                                    contentDescription = "Show ruler"
+                                },
+                            shape = CircleShape,
+                            color = scheme.secondaryContainer,
+                            shadowElevation = 4.dp,
+                            tonalElevation = 2.dp
+                        ) {
+                            Box(
+                                Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 RulerLineIcon(
                                     majorColor = scheme.onSecondaryContainer,
                                     minorColor = scheme.outlineVariant.copy(alpha = 0.75f),
