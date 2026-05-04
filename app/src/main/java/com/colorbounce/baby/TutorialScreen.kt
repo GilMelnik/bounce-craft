@@ -1114,9 +1114,8 @@ private fun TutorialWindow(
         val maxWindowWidth = maxOf(0.dp, this.maxWidth - outerMargin * 2)
         val maxWindowHeight = maxOf(0.dp, this.maxHeight - outerMargin * 2)
         val windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
-        val playAreaHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
+        val windowHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
         val headerHeight = if (insideWindowHeader != null) TutorialWindowInsideHeaderHeight else 0.dp
-        val totalWindowHeight = playAreaHeight + headerHeight
 
         // Transparent layer to catch taps outside the mini-window area
         Box(
@@ -1127,11 +1126,11 @@ private fun TutorialWindow(
                 }
         )
 
-        // Rounded window: taller when part 4 includes an inside header (different footprint vs other steps).
+        // Rounded window: same outer size for all steps; part 4 fits the switch header inside (shape area is shorter).
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(width = windowWidth, height = totalWindowHeight)
+                .size(width = windowWidth, height = windowHeight)
                 .background(
                     color = scheme.surfaceVariant.copy(alpha = 0.22f),
                     shape = RoundedCornerShape(22.dp)
@@ -1178,7 +1177,7 @@ private fun TutorialWindow(
 
         // Drawn in a separate layer so layout never recenters the play area above.
         if (belowMiniWindowContent != null) {
-            val explainTop = maxHeight / 2 + totalWindowHeight / 2 + 8.dp
+            val explainTop = maxHeight / 2 + windowHeight / 2 + 8.dp
             Column(
                 modifier = Modifier
                     .align(Alignment.TopStart)
