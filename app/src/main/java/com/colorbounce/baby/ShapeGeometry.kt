@@ -160,14 +160,6 @@ private fun closestPointOnSegment(
     return Pair(ax + abx * t, ay + aby * t)
 }
 
-internal fun pointInPolygonShapeSolid(px: Float, py: Float, shape: GameShape): Boolean {
-    if (!usesPolygonPhysics(shape.type)) return false
-    val vx = FloatArray(HEART_SAMPLES)
-    val vy = FloatArray(HEART_SAMPLES)
-    val n = fillPolygonVertices(shape, vx, vy)
-    return pointInPolygon(px, py, vx, vy, n)
-}
-
 /** Hit-testing: filled interior or within [edgeSlopPx] of an edge (matches arch stroke slop). */
 internal fun pointInPolygonShapeStroke(
     px: Float,

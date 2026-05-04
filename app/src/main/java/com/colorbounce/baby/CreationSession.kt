@@ -23,8 +23,6 @@ data class CreationSession(
     val physicsPaused: Boolean = false
 ) {
     companion object {
-        val default = CreationSession()
-
         fun fromSettings(settings: AppSettings): CreationSession =
             CreationSession(
                 selectedShapes = settings.selectedShapes.toSet(),

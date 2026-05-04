@@ -214,8 +214,8 @@ class GameViewModel : ViewModel() {
             }
 
             val newType = chooseType(
-                if (creation != null) creation.selectedShapes else settings.selectedShapes,
-                if (creation != null) creation.shapeSelectionMode else settings.shapeSelectionMode
+                creation?.selectedShapes ?: settings.selectedShapes,
+                creation?.shapeSelectionMode ?: settings.shapeSelectionMode
             )
             val size = 70f
             val spawnPoint = if (constrainInsideScreen) {
@@ -539,8 +539,8 @@ class GameViewModel : ViewModel() {
             }
 
             val newType = chooseType(
-                if (creation != null) creation.selectedShapes else settings.selectedShapes,
-                if (creation != null) creation.shapeSelectionMode else settings.shapeSelectionMode
+                creation?.selectedShapes ?: settings.selectedShapes,
+                creation?.shapeSelectionMode ?: settings.shapeSelectionMode
             )
             val size = Random.nextFloat() * (150f - 60f) + 60f
             val margin = size / 2f
@@ -788,9 +788,9 @@ class GameViewModel : ViewModel() {
         }
         return when (selectionMode) {
             ShapeSelectionMode.ALTERNATE -> {
-                val index = lastTypeIndex.getAndIncrement() % shapesList.size
-                if (index < 0) lastTypeIndex.set(0)
-                shapesList[abs(index) % shapesList.size]
+                val raw = lastTypeIndex.getAndIncrement()
+                val index = ((raw % shapesList.size) + shapesList.size) % shapesList.size
+                shapesList[index]
             }
             ShapeSelectionMode.RANDOM -> shapesList.random()
         }

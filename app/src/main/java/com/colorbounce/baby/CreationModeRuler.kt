@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -54,7 +53,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
-import kotlin.math.min
 
 /** Five 44.dp targets + gaps — widest ruler row (simulation controls). */
 private val RulerStripSlotSpacing = 8.dp
@@ -243,7 +241,7 @@ private fun RulerStripSurface(
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val idealCap = rulerFiveStrideRowWidth() +
                     if (includePeekInViewportCap) RulerStripScrollPeek else 0.dp
-                val viewportW = minOf(maxWidth, idealCap).coerceAtLeast(0.dp)
+                val viewportW = minOf(this@BoxWithConstraints.maxWidth, idealCap).coerceAtLeast(0.dp)
                 Box(
                     modifier = Modifier
                         .width(viewportW)

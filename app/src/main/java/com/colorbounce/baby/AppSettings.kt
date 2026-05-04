@@ -1,12 +1,5 @@
 package com.colorbounce.baby
 
-enum class ShapeMode {
-    CIRCLE_ONLY,
-    RECTANGLE_ONLY,
-    ALTERNATING,
-    RANDOM
-}
-
 enum class ShapeSelectionMode {
     ALTERNATE,
     RANDOM
@@ -19,7 +12,6 @@ enum class ThemeMode {
 }
 
 data class AppSettings(
-    val shapeMode: ShapeMode = ShapeMode.ALTERNATING,
     val selectedShapes: Set<ShapeType> = setOf(
         ShapeType.CIRCLE,
         ShapeType.RECTANGLE,

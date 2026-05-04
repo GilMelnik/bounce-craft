@@ -464,6 +464,7 @@ private fun AboutScreen(onBack: () -> Unit) {
                 .versionName
         } catch (e: Exception) {
             "—"
+            Log.e(TAG, "Error in AboutScreen", e)
         }
     }
     fun openUrl(url: String) {
@@ -698,7 +699,6 @@ private fun GameScreen(
 
     val pointerKey = listOf(
         contextMenuShapeId,
-        settings.shapeMode,
         settings.maxShapes,
         settings.selectedShapes,
         settings.shapeSelectionMode,
@@ -800,7 +800,10 @@ private fun GameScreen(
                                             }
                                         }
                                     }
-                                } catch (_: Exception) {
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "Game pointer input loop error", e)
                                 }
                             }
                         }
@@ -832,8 +835,8 @@ private fun GameScreen(
                     val gapPx = with(density) { 10.dp.toPx() }
                     val estMenuW = with(density) { 220.dp.toPx() }
                     val estMenuH = with(density) { 56.dp.toPx() }
-                    val screenW = with(density) { maxWidth.toPx() }
-                    val screenH = with(density) { maxHeight.toPx() }
+                    val screenW = with(density) { this@BoxWithConstraints.maxWidth.toPx() }
+                    val screenH = with(density) { this@BoxWithConstraints.maxHeight.toPx() }
 
                     Box(
                         Modifier
@@ -921,7 +924,8 @@ private fun GameScreen(
                                         }
                                     } catch (e: CancellationException) {
                                         throw e
-                                    } catch (_: Exception) {
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "Shape menu overlay pointer loop error", e)
                                     }
                                 }
                             }
@@ -1065,7 +1069,7 @@ private fun GameScreen(
                     .zIndex(8f)
             ) {
                 val scheme = MaterialTheme.colorScheme
-                val maxH = (maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
+                val maxH = (this@BoxWithConstraints.maxHeight * 0.38f).coerceIn(200.dp, 400.dp)
                 if (playRulerExpanded) {
                     Surface(
                         modifier = Modifier

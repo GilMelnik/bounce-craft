@@ -11,15 +11,14 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.testTag
 import kotlin.math.min
 
-/** Exposed for instrumented tests. */
-//const val GAME_SURFACE_TAG = "game_surface"
+/** Tag for [GamePlayfield] — used by instrumented tests (`game_surface`). */
+internal const val GAME_SURFACE_TAG = "game_surface"
 
 @Composable
 fun GamePlayfield(
     shapes: List<GameShape>,
     modifier: Modifier = Modifier
 ) {
-    val GAME_SURFACE_TAG = ""
     Canvas(
         modifier = modifier.testTag(GAME_SURFACE_TAG)
     ) {

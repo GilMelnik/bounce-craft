@@ -12,11 +12,11 @@ object ShapeVelocity {
     const val LAUNCH_DRAG_FACTOR = 8f
 
     fun clamp(vx: Float, vy: Float, maxSpeed: Float = 1200f): Pair<Float, Float> {
-         if (maxSpeed <= 0f) return 0f to 0f
-         val speed = hypot(vx, vy)
-         if (speed <= maxSpeed) return vx to vy
-         if (speed == 0f) return 0f to 0f
-         val scale = maxSpeed / speed
-         return vx * scale to vy * scale
-     }
+        if (maxSpeed <= 0f) return 0f to 0f
+        val speed = hypot(vx, vy)
+        if (speed <= maxSpeed) return vx to vy
+        if (speed == 0f) return 0f to 0f
+        val scale = maxSpeed / speed
+        return vx * scale to vy * scale
+    }
 }

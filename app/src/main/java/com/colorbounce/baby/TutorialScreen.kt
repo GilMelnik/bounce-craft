@@ -651,8 +651,8 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
             val gapPx = with(density) { 10.dp.toPx() }
             val estMenuW = with(density) { 220.dp.toPx() }
             val estMenuH = with(density) { 56.dp.toPx() }
-            val screenW = with(density) { maxWidth.toPx() }
-            val screenH = with(density) { maxHeight.toPx() }
+            val screenW = with(density) { this@BoxWithConstraints.maxWidth.toPx() }
+            val screenH = with(density) { this@BoxWithConstraints.maxHeight.toPx() }
 
             val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
             val menuIconInkForBar = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
@@ -1044,8 +1044,8 @@ private fun TutorialWindow(
     ) {
         val windowAspectRatio = 1.2f
         val outerMargin = 12.dp
-        val maxWindowWidth = maxOf(0.dp, maxWidth - outerMargin * 2)
-        val maxWindowHeight = maxOf(0.dp, maxHeight - outerMargin * 2)
+        val maxWindowWidth = maxOf(0.dp, this.maxWidth - outerMargin * 2)
+        val maxWindowHeight = maxOf(0.dp, this.maxHeight - outerMargin * 2)
         val windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
         val windowHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
 

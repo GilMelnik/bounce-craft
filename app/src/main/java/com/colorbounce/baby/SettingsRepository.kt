@@ -14,7 +14,6 @@ private val Context.dataStore by preferencesDataStore(name = "colorbounce_settin
 
 class SettingsRepository(private val context: Context) {
     private object Keys {
-        val shapeMode = stringPreferencesKey("shape_mode")
         val selectedShapes = stringPreferencesKey("selected_shapes")
         val shapeSelectionMode = stringPreferencesKey("shape_selection_mode")
         val timeoutSeconds = intPreferencesKey("timeout_seconds")
@@ -73,7 +72,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateSelectedShapes(shapes: Set<ShapeType>) {
         if (shapes.isEmpty()) return // Prevent empty set
-        context.dataStore.edit { it[Keys.selectedShapes] = shapes.joinToString(",") { it.name } }
+        context.dataStore.edit { it[Keys.selectedShapes] = shapes.joinToString(",") { it -> it.name } }
     }
 
     suspend fun updateShapeSelectionMode(mode: ShapeSelectionMode) {
@@ -89,10 +88,6 @@ class SettingsRepository(private val context: Context) {
     }
 
     private fun toSettings(prefs: Preferences): AppSettings {
-        val shapeMode = runCatching {
-            ShapeMode.valueOf(prefs[Keys.shapeMode] ?: ShapeMode.ALTERNATING.name)
-        }.getOrDefault(ShapeMode.ALTERNATING)
-
         val selectedShapes = runCatching {
             val str = prefs[Keys.selectedShapes]
                 ?: "CIRCLE,RECTANGLE,TRIANGLE,ARCH,STAR,HEART,DIAMOND"
@@ -127,7 +122,6 @@ class SettingsRepository(private val context: Context) {
         val shapeTimeoutSeconds = storedSeconds.coerceIn(3, 60)
 
         return AppSettings(
-            shapeMode = shapeMode,
             selectedShapes = selectedShapes,
             shapeSelectionMode = shapeSelectionMode,
             shapeTimeoutImmortal = shapeTimeoutImmortal,

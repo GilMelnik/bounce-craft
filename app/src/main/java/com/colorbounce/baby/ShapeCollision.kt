@@ -8,7 +8,7 @@ import kotlin.math.sign
 
 private const val EPS = 1e-4f
 
-/** Normal points from [a] toward [b]; overlap is penetration depth along that normal. */
+/** Normal points from a toward b; overlap is penetration depth along that normal. */
 internal data class CollisionManifold(
     val nx: Float,
     val ny: Float,
@@ -53,8 +53,8 @@ private data class ArchBoundaryClosest(
 )
 
 /**
- * Top semicircle of circle centered at [cx],[cy]: arc from left equator through top to right equator.
- * Points on that arc satisfy [qy] <= [cy] (screen coords, y down).
+ * Top semicircle of circle centered at cx,cy: arc from left equator through top to right equator.
+ * Points on that arc satisfy qy <= cy (screen coords, y down).
  */
 private fun closestPointOnTopSemicircle(
     cx: Float,
