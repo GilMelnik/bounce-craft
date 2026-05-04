@@ -12,8 +12,8 @@ android {
         applicationId = "com.colorbounce.baby"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "2.5"
+        versionCode = 10
+        versionName = "3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
