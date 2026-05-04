@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
@@ -454,6 +453,7 @@ private fun MainMenuScreen(
 private fun AboutScreen(onBack: () -> Unit) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
+    val onSurfaceVariant = scheme.onSurfaceVariant
     val scroll = rememberScrollState()
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
     val appVersion = remember {
@@ -495,16 +495,38 @@ private fun AboutScreen(onBack: () -> Unit) {
                     .padding(top = 16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-                Spacer(Modifier.width(8.dp))
                 Text(
-                    "About",
+                    text = "About",
+                    modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     color = scheme.onBackground
                 )
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .background(
+                            scheme.surfaceVariant.copy(alpha = 0.8f),
+                            CircleShape
+                        )
+                        .clickable(onClick = onBack),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Canvas(Modifier.size(20.dp)) {
+                        drawLine(
+                            color = onSurfaceVariant,
+                            start = Offset(0f, 0f),
+                            end = Offset(size.width, size.height),
+                            strokeWidth = 4f
+                        )
+                        drawLine(
+                            color = onSurfaceVariant,
+                            start = Offset(size.width, 0f),
+                            end = Offset(0f, size.height),
+                            strokeWidth = 4f
+                        )
+                    }
+                }
             }
 
             val bodyStyle = MaterialTheme.typography.bodyLarge.copy(color = scheme.onBackground)
@@ -1313,7 +1335,7 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 Slider(
                     value = settings.shapeTimeoutSeconds.toFloat(),
                     onValueChange = { scope.launch { repository.updateTimeoutSeconds(it.toInt()) } },
-                    valueRange = 3f..59f,
+                    valueRange = 3f..60f,
                     colors = SliderDefaults.colors(
                         thumbColor = scheme.primary,
                         activeTrackColor = scheme.primary,

@@ -34,7 +34,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateTimeoutSeconds(seconds: Int) {
         context.dataStore.edit {
-            it[Keys.timeoutSeconds] = seconds.coerceIn(3, 59)
+            it[Keys.timeoutSeconds] = seconds.coerceIn(3, 60)
             it[Keys.shapeTimeoutImmortal] = false
         }
     }
@@ -124,7 +124,7 @@ class SettingsRepository(private val context: Context) {
             storedSeconds >= 60 -> true
             else -> false
         }
-        val shapeTimeoutSeconds = storedSeconds.coerceIn(3, 59)
+        val shapeTimeoutSeconds = storedSeconds.coerceIn(3, 60)
 
         return AppSettings(
             shapeMode = shapeMode,
