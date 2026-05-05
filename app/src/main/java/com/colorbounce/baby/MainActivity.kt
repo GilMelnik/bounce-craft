@@ -503,8 +503,8 @@ private fun AboutScreen(onBack: () -> Unit) {
                 .padding(
                     top = systemBarsPadding.calculateTopPadding(),
                     bottom = systemBarsPadding.calculateBottomPadding(),
-                    start = 16.dp,
-                    end = 16.dp
+                    start = 24.dp,
+                    end = 24.dp
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -1737,8 +1737,8 @@ private fun SettingsScreen(settings: AppSettings, repository: SettingsRepository
                 .padding(
                     top = systemBarsPadding.calculateTopPadding(),
                     bottom = systemBarsPadding.calculateBottomPadding(),
-                    start = 16.dp,
-                    end = 16.dp
+                    start = 24.dp,
+                    end = 24.dp
                 ),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
