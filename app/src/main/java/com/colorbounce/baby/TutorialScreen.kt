@@ -699,7 +699,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 
     TutorialStepLayout(
         title = "Part 4 - Shape menu",
-        body = "Switch the setting to allow Double-tap for the shape menu.",
+        body = "Turn on the switch (same as in Settings). Then double-tap the shape.",
         step = 3,
         instructionBodyMaxHeight = TutorialLongInstructionBodyMaxHeight,
         onOutsideTap = onFinish,
