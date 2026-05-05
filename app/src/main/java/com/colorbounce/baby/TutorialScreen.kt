@@ -938,8 +938,9 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         step = 4,
         instructionBodyMaxHeight = TutorialLongInstructionBodyMaxHeight,
         tutorialPortraitStackExplainBelow = true,
-        tutorialLandscapeWindowPaneWeight = 0.78f,
+        tutorialLandscapeWindowPaneWeight = 0.48f,
         tutorialWindowHugRuler = true,
+        tutorialLandscapeWindowVerticalPadding = 8.dp,
         tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
@@ -1192,6 +1193,8 @@ private fun TutorialStepLayout(
     tutorialWindowHugRuler: Boolean = false,
     /** Portrait: space below instruction column before the mini-window (default 40.dp). */
     tutorialPortraitBodyBottomSpacer: Dp? = null,
+    /** Landscape: vertical padding around the mini-window pane (default 18.dp). */
+    tutorialLandscapeWindowVerticalPadding: Dp = 18.dp,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
@@ -1267,7 +1270,7 @@ private fun TutorialStepLayout(
                         modifier = Modifier
                             .weight(windowPaneWeight)
                             .fillMaxHeight()
-                            .padding(vertical = 18.dp),
+                            .padding(vertical = tutorialLandscapeWindowVerticalPadding),
                         onOutsideTap = onOutsideTap,
                         onBoundsChanged = { tutorialWindowBounds = it },
                         windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
@@ -1455,8 +1458,9 @@ private fun TutorialWindow(
             val rulerW = rulerFloatingPlayPanelWidth()
             val rulerH = creationModeRulerPlayColumnHeight()
             windowWidth = (rulerW + rulerFrameInnerPad).coerceAtMost(maxWindowWidth)
-            windowHeightFixed = null
             cardOuterHeight = headerHeight + 1.dp + rulerH + rulerFrameInnerPad
+            // Fixed size from first frame so portrait does not resize when the ruler appears.
+            windowHeightFixed = cardOuterHeight
         } else {
             windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
             windowHeightFixed =
