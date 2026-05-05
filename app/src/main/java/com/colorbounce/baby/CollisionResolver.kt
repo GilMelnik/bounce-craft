@@ -8,6 +8,11 @@ import kotlin.math.min
  * place. Stateless beyond the wall-reflection helper buffer; the viewmodel decides which body counts
  * as immovable each call.
  *
+ * **Convention:** positional correction uses `a -= n * overlap/2`, `b += n * overlap/2`. Circle-vs-polygon
+ * manifolds from [CollisionDispatcher] define **n as the direction the circle should move** to separate.
+ * Therefore the **circle must be passed as [b]** (see [GameViewModel] pair reorder). Otherwise the circle
+ * receives `-n` and gets pushed *into* the polygon when its center is inside or overlapping.
+ *
  * Behavior split (matches the spec choice):
  *  - Both immovable: nothing to do.
  *  - One immovable: full positional push on the movable side and wall reflection

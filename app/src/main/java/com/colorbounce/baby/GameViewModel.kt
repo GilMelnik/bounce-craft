@@ -496,14 +496,33 @@ class GameViewModel : ViewModel() {
                     val aImmovable = aHeld || (aPin && !aHeld)
                     val bImmovable = bHeld || (bPin && !bHeld)
 
-                    collisionResolver.resolve(
-                        a, b, manifold,
-                        aImmovable = aImmovable,
-                        bImmovable = bImmovable,
-                        maxSpeed = maxSpeed,
-                        screenW = width,
-                        screenH = height
-                    )
+                    // Circle-vs-polygon manifolds encode separation along +n for the **circle**. Resolver
+                    // applies a -= n/2 and b += n/2, so the circle must be body `b` or positional correction
+                    // inverts and pushes the circle deeper (especially when center is inside the polygon).
+                    val circleFirst = a.type == ShapeType.CIRCLE && b.type != ShapeType.CIRCLE
+                    if (circleFirst) {
+                        collisionResolver.resolve(
+                            a = b,
+                            b = a,
+                            manifold = manifold,
+                            aImmovable = bImmovable,
+                            bImmovable = aImmovable,
+                            maxSpeed = maxSpeed,
+                            screenW = width,
+                            screenH = height
+                        )
+                    } else {
+                        collisionResolver.resolve(
+                            a = a,
+                            b = b,
+                            manifold = manifold,
+                            aImmovable = aImmovable,
+                            bImmovable = bImmovable,
+                            maxSpeed = maxSpeed,
+                            screenW = width,
+                            screenH = height
+                        )
+                    }
                 }
             }
 

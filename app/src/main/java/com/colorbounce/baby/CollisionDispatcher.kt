@@ -47,12 +47,14 @@ class CollisionDispatcher {
             return circleVsCircle(a.x, a.y, ar, b.x, b.y, br, bIntoA = false)
         }
         if (aCircle) {
-            val m = circleVsShape(a, b, flipNormal = false)
+            val m = circleVsShape(a, b)
             if (m != null) return m
             return containmentFallback(a, b)
         }
         if (bCircle) {
-            val m = circleVsShape(b, a, flipNormal = true)
+            // Pair order from the broad phase is not canonical; manifold normals must always mean
+            // "direction the circle moves to separate" — never flip based on (a,b) ordering.
+            val m = circleVsShape(b, a)
             if (m != null) return m
             return containmentFallback(a, b)
         }
@@ -66,7 +68,7 @@ class CollisionDispatcher {
     // Circle vs arbitrary non-circle (polygon/hulls/star outline)
     // -----------------------------------------------------------------------------------------
 
-    private fun circleVsShape(circle: GameShape, other: GameShape, flipNormal: Boolean): CollisionManifold? {
+    private fun circleVsShape(circle: GameShape, other: GameShape): CollisionManifold? {
         val cx = circle.x
         val cy = circle.y
         val r = circle.width * 0.5f
@@ -85,9 +87,6 @@ class CollisionDispatcher {
             else -> circleVsConvexHulls(cx, cy, r, other)
         }
         if (!hit) return null
-        if (flipNormal) {
-            manifold.set(-manifold.nx, -manifold.ny, manifold.penetrationDepth)
-        }
         return manifold
     }
 
@@ -230,6 +229,16 @@ class CollisionDispatcher {
             manifold.set(-nx, -ny, pen)
             return manifold
         }
+        val m3 = centerInsideConvexHullFallback(a, b)
+        if (m3 != null) return m3
+        val m4 = centerInsideConvexHullFallback(b, a)
+        if (m4 != null) {
+            val nx = manifold.nx
+            val ny = manifold.ny
+            val pen = manifold.penetrationDepth
+            manifold.set(-nx, -ny, pen)
+            return manifold
+        }
         return null
     }
 
@@ -283,6 +292,67 @@ class CollisionDispatcher {
             ShapeType.STAR, ShapeType.HEART, ShapeType.DIAMOND -> fillPolygonVertices(shape, outX, outY)
             else -> 0
         }
+
+    /**
+     * Last-resort push-out when the circle center lies inside a triangle/rectangle hull but the
+     * primary test missed (timestep / numeric edge cases). Star/heart/diamond use outline containment
+     * above; arch uses [centerInsideArch].
+     */
+    private fun centerInsideConvexHullFallback(pointBody: GameShape, polyBody: GameShape): CollisionManifold? {
+        if (polyBody.type != ShapeType.TRIANGLE && polyBody.type != ShapeType.RECTANGLE) return null
+        for (hull in polyBody.convexHulls) {
+            if (hull.count < 3) continue
+            if (!pointInConvexPolygon(pointBody.x, pointBody.y, hull)) continue
+            val cp = closestPointOnConvexHullBoundary(pointBody.x, pointBody.y, hull)
+            val qx = cp.x
+            val qy = cp.y
+            val dist = cp.dist
+            val nx: Float
+            val ny: Float
+            if (dist < COLLISION_EPS) {
+                nx = 1f
+                ny = 0f
+            } else {
+                nx = -(pointBody.x - qx) / dist
+                ny = -(pointBody.y - qy) / dist
+            }
+            val extra = if (pointBody.type == ShapeType.CIRCLE) pointBody.width * 0.5f else 0f
+            manifold.set(nx, ny, dist + extra)
+            return manifold
+        }
+        return null
+    }
+
+    private fun closestPointOnConvexHullBoundary(px: Float, py: Float, poly: MutablePolygon): ClosestPointResult {
+        val n = poly.count
+        var bestQx = poly.xs[0]
+        var bestQy = poly.ys[0]
+        var bestD2 = Float.MAX_VALUE
+        for (i in 0 until n) {
+            val ax = poly.xs[i]
+            val ay = poly.ys[i]
+            val bx = poly.xs[(i + 1) % n]
+            val by = poly.ys[(i + 1) % n]
+            val abx = bx - ax
+            val aby = by - ay
+            val apx = px - ax
+            val apy = py - ay
+            val ab2 = abx * abx + aby * aby
+            val t = if (ab2 > COLLISION_EPS * COLLISION_EPS) ((apx * abx + apy * aby) / ab2).coerceIn(0f, 1f) else 0f
+            val qx = ax + abx * t
+            val qy = ay + aby * t
+            val dx = px - qx
+            val dy = py - qy
+            val d2 = dx * dx + dy * dy
+            if (d2 < bestD2) {
+                bestD2 = d2
+                bestQx = qx
+                bestQy = qy
+            }
+        }
+        val dist = sqrt(bestD2.toDouble()).toFloat()
+        return ClosestPointResult(bestQx, bestQy, dist)
+    }
 
     /** Returns closest point on polygon boundary and distance from (px,py). No allocations. */
     private fun closestPointOnPolyline(
@@ -577,11 +647,21 @@ class CollisionDispatcher {
     private fun archDispatch(a: GameShape, b: GameShape): CollisionManifold? {
         return when {
             a is ArchBody && b is ArchBody -> archVsArch(a, b)
-            a is ArchBody -> archVsCircle(a, b.x, b.y, colliderRadius(b))
+            a is ArchBody -> {
+                // Circle is the accurate case; otherwise fall back to vertex-in-solid protection.
+                val hit = archVsCircle(a, b.x, b.y, colliderRadius(b))
+                    ?: archVsOtherVertexContainment(a, b)
+                hit
+            }
             b is ArchBody -> {
-                val hit = archVsCircle(b, a.x, a.y, colliderRadius(a)) ?: return null
-                manifold.set(-manifold.nx, -manifold.ny, manifold.penetrationDepth)
-                manifold
+                val hit = archVsCircle(b, a.x, a.y, colliderRadius(a))
+                    ?: archVsOtherVertexContainment(b, a)
+                    ?: return null
+                val nx = manifold.nx
+                val ny = manifold.ny
+                val pen = manifold.penetrationDepth
+                manifold.set(-nx, -ny, pen)
+                return manifold
             }
             else -> null
         }
@@ -653,9 +733,62 @@ class CollisionDispatcher {
             manifold.set(nnx, nny, otherRadius)
             return manifold
         }
+        // Critical fix: if the circle center is INSIDE the arch solid band, penetration is (r + dist)
+        // in the direction from center toward the closest boundary point.
+        val centerInsideSolid = pointInArchSolid(ox, oy, arch)
+        if (centerInsideSolid) {
+            val nx = -(dx / dist)
+            val ny = -(dy / dist)
+            manifold.set(nx, ny, otherRadius + dist)
+            return manifold
+        }
         val penetration = otherRadius - dist
         if (penetration <= 0f) return null
         manifold.set(dx / dist, dy / dist, penetration)
+        return manifold
+    }
+
+    /**
+     * Extra protection for arch vs non-circle: if any polygon vertex is inside the arch SOLID band,
+     * we push the other shape out along the shortest vertex-to-boundary direction.
+     *
+     * This prevents \"stuck in arch\" when the other shape's center is outside, but an edge/corner
+     * is embedded in the band.
+     */
+    private fun archVsOtherVertexContainment(arch: ArchBody, other: GameShape): CollisionManifold? {
+        // Only meaningful for shapes that have hulls.
+        if (other.convexHulls.isEmpty()) return null
+        var bestDist = Float.MAX_VALUE
+        var bestNx = 0f
+        var bestNy = 0f
+        var any = false
+        for (h in other.convexHulls) {
+            val n = h.count
+            for (i in 0 until n) {
+                val px = h.xs[i]
+                val py = h.ys[i]
+                if (!pointInArchSolid(px, py, arch)) continue
+                val cl = closestOnArchSolidBoundary(arch, px, py)
+                val dx = px - cl.x
+                val dy = py - cl.y
+                val d2 = dx * dx + dy * dy
+                val dist = sqrt(d2.toDouble()).toFloat()
+                if (dist < bestDist) {
+                    bestDist = dist
+                    if (dist < COLLISION_EPS) {
+                        bestNx = 0f
+                        bestNy = -1f
+                    } else {
+                        // From vertex toward boundary (push out of solid).
+                        bestNx = -(dx / dist)
+                        bestNy = -(dy / dist)
+                    }
+                    any = true
+                }
+            }
+        }
+        if (!any) return null
+        manifold.set(bestNx, bestNy, bestDist)
         return manifold
     }
 }
