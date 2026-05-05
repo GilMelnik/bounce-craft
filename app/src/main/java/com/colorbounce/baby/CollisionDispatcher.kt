@@ -1,9 +1,12 @@
 package com.colorbounce.baby
 
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.sign
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
@@ -648,19 +651,30 @@ class CollisionDispatcher {
         return when {
             a is ArchBody && b is ArchBody -> archVsArch(a, b)
             a is ArchBody -> {
-                // Circle is the accurate case; otherwise fall back to vertex-in-solid protection.
+                // Circle–arch uses exact boundary distance; polygons also need hull sampling because
+                // collisionRadius is an inscribed approximation (triangle/square corners stick out).
                 val hit = archVsCircle(a, b.x, b.y, colliderRadius(b))
                     ?: archVsOtherVertexContainment(a, b)
+                    ?: archVsConvexPolygonsByArchSampling(a, b)
                 hit
             }
             b is ArchBody -> {
                 val hit = archVsCircle(b, a.x, a.y, colliderRadius(a))
                     ?: archVsOtherVertexContainment(b, a)
+                    ?: archVsConvexPolygonsByArchSampling(b, a)
                     ?: return null
-                val nx = manifold.nx
-                val ny = manifold.ny
-                val pen = manifold.penetrationDepth
-                manifold.set(-nx, -ny, pen)
+                // Broad phase yields (lowerIndex, higherIndex), so pair order is not (arch, other).
+                // [CollisionResolver] always applies a -= n/2, b += n/2. For arch vs polygon that
+                // means the non-arch body must move along +n. [archVsCircle] / vertex containment /
+                // sampling already emit n in that frame when the arch is body `a` in this helper.
+                // When the circle is body `a`, the resolver still orders resolve(arch, circle), and
+                // the manifold must stay in the "circle moves +n" convention — do not negate.
+                if (a.type != ShapeType.CIRCLE) {
+                    val nx = manifold.nx
+                    val ny = manifold.ny
+                    val pen = manifold.penetrationDepth
+                    manifold.set(-nx, -ny, pen)
+                }
                 return manifold
             }
             else -> null
@@ -670,6 +684,75 @@ class CollisionDispatcher {
     /** Physics radius for arch pairing when the other body is not a pure circle outline. */
     private fun colliderRadius(body: GameShape): Float =
         if (body.type == ShapeType.CIRCLE) body.width * 0.5f else body.collisionRadius
+
+    /**
+     * Approximates the stroked arch as a union of small disks along the medial semicircle and caps,
+     * then runs [circleVsConvex] per disk (same MTV convention as circle-vs-polygon: manifold normal
+     * is negated so the non-arch body moves along +n when [CollisionResolver] uses arch as `a`).
+     */
+    private fun archVsConvexPolygonsByArchSampling(arch: ArchBody, polyBody: GameShape): CollisionManifold? {
+        if (polyBody.convexHulls.isEmpty()) return null
+        val c = archCircleCenter(arch)
+        val cx = c.x
+        val cy = c.y
+        val rMid = archMidRadius(arch)
+        val rOut = archOuterRadius(arch)
+        val rIn = archInnerRadius(arch)
+        val rDisk = max(COLLISION_EPS * 4f, archStrokeWidth(arch) * 0.5f + 0.5f)
+        var bestPen = Float.MAX_VALUE
+        var bestNx = 0f
+        var bestNy = 0f
+        var any = false
+        val arcSteps = 20
+        for (hull in polyBody.convexHulls) {
+            if (hull.count < 3) continue
+            for (i in 0..arcSteps) {
+                val t = i / arcSteps.toFloat()
+                val theta = PI.toFloat() * t
+                val px = cx + rMid * cos(theta)
+                val py = cy - rMid * sin(theta)
+                if (circleVsConvex(px, py, rDisk, hull)) {
+                    val pen = manifold.penetrationDepth
+                    if (pen < bestPen) {
+                        bestPen = pen
+                        bestNx = -manifold.nx
+                        bestNy = -manifold.ny
+                        any = true
+                    }
+                }
+            }
+            val span = rOut - rIn
+            if (span > COLLISION_EPS) {
+                val capDivs = 5
+                for (k in 0..capDivs) {
+                    val u = k / capDivs.toFloat()
+                    val xLeft = cx - rOut + u * span
+                    val xRight = cx + rIn + u * span
+                    if (circleVsConvex(xLeft, cy, rDisk, hull)) {
+                        val pen = manifold.penetrationDepth
+                        if (pen < bestPen) {
+                            bestPen = pen
+                            bestNx = -manifold.nx
+                            bestNy = -manifold.ny
+                            any = true
+                        }
+                    }
+                    if (circleVsConvex(xRight, cy, rDisk, hull)) {
+                        val pen = manifold.penetrationDepth
+                        if (pen < bestPen) {
+                            bestPen = pen
+                            bestNx = -manifold.nx
+                            bestNy = -manifold.ny
+                            any = true
+                        }
+                    }
+                }
+            }
+        }
+        if (!any) return null
+        manifold.set(bestNx, bestNy, bestPen)
+        return manifold
+    }
 
     private fun archVsArch(a: ArchBody, b: ArchBody): CollisionManifold? {
         val cax = a.x
