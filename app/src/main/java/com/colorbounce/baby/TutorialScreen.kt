@@ -742,7 +742,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
         instructionBodyMaxHeight = TutorialLongInstructionBodyMaxHeight,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
-            "Tap outside the shape and toolbar to finish"
+            "Tap outside the shape and toolbar to continue"
         } else {
             null
         },
