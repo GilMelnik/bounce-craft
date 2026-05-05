@@ -29,12 +29,16 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.outlined.LockOpen
+import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.HorizontalDivider
@@ -94,7 +98,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val STEP_COUNT = 4
+private const val STEP_COUNT = 5
 private const val SUCCESS_ADVANCE_DELAY_MS = 4000L
 private const val FORMATION_ADVANCE_DELAY_MS = 4500L
 
@@ -136,7 +140,8 @@ fun TutorialScreen(onDismiss: () -> Unit) {
         0 -> CreateShapeTutorialStep(onAdvance = ::nextStep)
         1 -> SizeAndSpeedTutorialStep(onAdvance = ::nextStep)
         2 -> MoveShapeTutorialStep(onAdvance = ::nextStep)
-        else -> SelectShapeTutorialStep(onFinish = ::nextStep)
+        3 -> SelectShapeTutorialStep(onFinish = ::nextStep)
+        else -> RulerTutorialStep(onFinish = ::nextStep)
     }
 }
 
@@ -600,6 +605,39 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
 }
 
 @Composable
+private fun TutorialRulerToggleRow(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "Show ruler on play screen",
+            color = scheme.onBackground,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(end = 8.dp)
+        )
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = scheme.primary,
+                checkedTrackColor = scheme.primaryContainer,
+                uncheckedThumbColor = scheme.outline,
+                uncheckedTrackColor = scheme.surfaceVariant,
+                uncheckedBorderColor = scheme.outline
+            )
+        )
+    }
+}
+
+@Composable
 private fun TutorialDoubleTapToggleRow(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
@@ -882,6 +920,133 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
 }
 
 @Composable
+private fun RulerTutorialStep(onFinish: () -> Unit) {
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val settings = remember { tutorialSettings(maxVelocity = 1800) }
+    var tutorialRulerEnabled by rememberSaveable { mutableStateOf(false) }
+    var rulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
+    val scheme = MaterialTheme.colorScheme
+
+    TutorialStepLayout(
+        title = "Part 5 - Play ruler",
+        body = if (tutorialRulerEnabled) {
+            ""
+        } else {
+            "Turn on the switch (same as in Settings). The ruler appears in the window for this step only."
+        },
+        step = 4,
+        instructionBodyMaxHeight = TutorialLongInstructionBodyMaxHeight,
+        tutorialPortraitStackExplainBelow = true,
+        tutorialLandscapeWindowPaneWeight = 0.78f,
+        tutorialWindowHugRuler = true,
+        tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
+        onOutsideTap = onFinish,
+        footerHint = if (tutorialRulerEnabled) {
+            "Tap outside the window to finish"
+        } else {
+            null
+        },
+        insideWindowHeader = {
+            TutorialRulerToggleRow(
+                checked = tutorialRulerEnabled,
+                onCheckedChange = { tutorialRulerEnabled = it }
+            )
+        },
+        belowBodyContent = if (tutorialRulerEnabled && isLandscape) {
+            { RulerExplainSection() }
+        } else {
+            null
+        },
+        belowMiniWindowContent = if (tutorialRulerEnabled && !isLandscape) {
+            { RulerExplainSection() }
+        } else {
+            null
+        },
+        windowContent = {
+            if (tutorialRulerEnabled) {
+                val rulerCap = creationModeRulerPlayColumnHeight()
+                Box(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CreationModeRuler(
+                        session = rulerSession,
+                        onSessionChange = { rulerSession = it },
+                        onCollapse = {},
+                        isSideBar = false,
+                        maxHeight = rulerCap
+                    )
+                }
+            } else {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Flip the switch above to preview the ruler.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = scheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    )
+}
+
+@Composable
+private fun RulerExplainSection() {
+    val scheme = MaterialTheme.colorScheme
+    val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
+    val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
+    val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        ShapeMenuExplainRow(
+            icon = Icons.Filled.Pause,
+            tint = menuIconInk,
+            text = "Pause / play — motion on or off.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Outlined.LockOpen,
+            tint = Color.White,
+            rainbowGradient = true,
+            text = "Hue: locked or free while dragging for all shapes.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Filled.PushPin,
+            tint = menuIconInkDim,
+            text = "Pin: every shape at once.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Outlined.Timer,
+            tint = menuIconInkDim,
+            text = "Timed vs ∞ — all shapes may expire or stay.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Filled.Repeat,
+            tint = menuIconInkDim,
+            text = "Shapes row: which types; order or random.",
+            textColor = scheme.onBackground
+        )
+        ShapeMenuExplainRow(
+            icon = Icons.Outlined.Palette,
+            tint = menuIconInkDim,
+            text = "Colors row: palette or preset tint for new shapes.",
+            textColor = scheme.onBackground
+        )
+    }
+}
+
+@Composable
 private fun ShapeMenuExplainSection() {
     val scheme = MaterialTheme.colorScheme
     val menuSurfaceLum = scheme.surfaceContainerHigh.luminance()
@@ -1017,6 +1182,16 @@ private fun TutorialStepLayout(
     onOutsideTap: () -> Unit,
     footerHint: String? = null,
     instructionBodyMaxHeight: Dp? = null,
+    /** When set, overrides width÷height for the rounded mini-window ([TutorialWindow]). */
+    tutorialWindowAspectRatio: Float? = null,
+    /** Portrait: stack explanations under the mini-window with scroll; avoids cramming text below a centered card. */
+    tutorialPortraitStackExplainBelow: Boolean = false,
+    /** Landscape: fraction of the main row width given to the mini-window pane (default 0.58). */
+    tutorialLandscapeWindowPaneWeight: Float? = null,
+    /** Mini-window sizes to the play ruler; ignores [tutorialWindowAspectRatio]. */
+    tutorialWindowHugRuler: Boolean = false,
+    /** Portrait: space below instruction column before the mini-window (default 40.dp). */
+    tutorialPortraitBodyBottomSpacer: Dp? = null,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
@@ -1054,9 +1229,11 @@ private fun TutorialStepLayout(
                         },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val textPaneWeight = 1f - (tutorialLandscapeWindowPaneWeight ?: 0.58f)
+                    val windowPaneWeight = tutorialLandscapeWindowPaneWeight ?: 0.58f
                     Column(
                         modifier = Modifier
-                            .weight(0.42f)
+                            .weight(textPaneWeight)
                             .fillMaxHeight()
                     ) {
                         Text(
@@ -1088,11 +1265,14 @@ private fun TutorialStepLayout(
 
                     TutorialWindow(
                         modifier = Modifier
-                            .weight(0.58f)
+                            .weight(windowPaneWeight)
                             .fillMaxHeight()
                             .padding(vertical = 18.dp),
                         onOutsideTap = onOutsideTap,
                         onBoundsChanged = { tutorialWindowBounds = it },
+                        windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
+                        hugRulerContent = tutorialWindowHugRuler,
+                        portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
                         insideWindowHeader = insideWindowHeader,
                         belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
@@ -1123,7 +1303,7 @@ private fun TutorialStepLayout(
                         belowBodyContent = belowBodyContent,
                         wrapBelowBodyInFillWidthColumn = true
                     )
-                    Spacer(Modifier.height(40.dp))
+                    Spacer(Modifier.height(tutorialPortraitBodyBottomSpacer ?: 40.dp))
                 }
 
                 TutorialWindow(
@@ -1131,6 +1311,9 @@ private fun TutorialStepLayout(
                         .weight(1f)
                         .fillMaxWidth(),
                     onOutsideTap = onOutsideTap,
+                    windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
+                    hugRulerContent = tutorialWindowHugRuler,
+                    portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
                     insideWindowHeader = insideWindowHeader,
                     belowMiniWindowContent = belowMiniWindowContent,
                     content = windowContent
@@ -1152,15 +1335,98 @@ private fun TutorialStepLayout(
 }
 
 @Composable
+private fun TutorialRoundedMiniWindowFrame(
+    modifier: Modifier = Modifier,
+    windowWidth: Dp,
+    /** When null, height hugs [content] (used for ruler-sized mini-window). */
+    windowHeight: Dp?,
+    scheme: ColorScheme,
+    headerHeight: Dp,
+    insideWindowHeader: (@Composable () -> Unit)?,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val sizedModifier = if (windowHeight != null) {
+        modifier.size(width = windowWidth, height = windowHeight)
+    } else {
+        modifier.width(windowWidth).wrapContentHeight()
+    }
+    Box(
+        modifier = sizedModifier
+            .background(
+                color = scheme.surfaceVariant.copy(alpha = 0.22f),
+                shape = RoundedCornerShape(22.dp)
+            )
+            .border(
+                width = 1.5.dp,
+                color = scheme.outline.copy(alpha = 0.7f),
+                shape = RoundedCornerShape(22.dp)
+            )
+            .padding(12.dp)
+    ) {
+        if (insideWindowHeader != null) {
+            val columnFill = windowHeight != null
+            Column(
+                modifier = if (columnFill) Modifier.fillMaxSize() else Modifier.wrapContentHeight()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(headerHeight)
+                        .background(
+                            color = scheme.surfaceContainerHigh.copy(alpha = 0.92f),
+                            shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    insideWindowHeader()
+                }
+                HorizontalDivider(
+                    color = scheme.outline.copy(alpha = 0.45f),
+                    thickness = 1.dp
+                )
+                Box(
+                    modifier = Modifier
+                        .then(
+                            if (columnFill) {
+                                Modifier.weight(1f)
+                            } else {
+                                Modifier.wrapContentHeight()
+                            }
+                        )
+                        .fillMaxWidth()
+                        .background(scheme.surface.copy(alpha = 0.08f))
+                ) {
+                    content()
+                }
+            }
+        } else {
+            content()
+        }
+    }
+}
+
+@Composable
 private fun TutorialWindow(
     modifier: Modifier,
     onOutsideTap: () -> Unit,
     onBoundsChanged: (Rect) -> Unit = {},
+    /** Width divided by height of the rounded frame (ignored when [hugRulerContent] is true). */
+    windowAspectRatio: Float = 1.2f,
+    /** Sizes the rounded frame to the play ruler width/height (plus header and padding). */
+    hugRulerContent: Boolean = false,
+    /** Portrait only: place [belowMiniWindowContent] under the card with scroll instead of below a vertically centered card. */
+    portraitStackExplanationBelow: Boolean = false,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
+    val stackExplainBelow =
+        portraitStackExplanationBelow && !isLandscape && belowMiniWindowContent != null
+    val explainScrollState = rememberScrollState()
 
     BoxWithConstraints(
         modifier = modifier.onGloballyPositioned { coordinates ->
@@ -1175,15 +1441,29 @@ private fun TutorialWindow(
             )
         }
     ) {
-        val windowAspectRatio = 1.2f
         val outerMargin = 12.dp
         val maxWindowWidth = maxOf(0.dp, this.maxWidth - outerMargin * 2)
         val maxWindowHeight = maxOf(0.dp, this.maxHeight - outerMargin * 2)
-        val windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
-        val windowHeight = if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
         val headerHeight = if (insideWindowHeader != null) TutorialWindowInsideHeaderHeight else 0.dp
+        val rulerFrameInnerPad = 24.dp // matches outer frame horizontal+vertical inset from ruler column
 
-        // Transparent layer to catch taps outside the mini-window area
+        val windowWidth: Dp
+        val windowHeightFixed: Dp?
+        val cardOuterHeight: Dp
+
+        if (hugRulerContent) {
+            val rulerW = rulerFloatingPlayPanelWidth()
+            val rulerH = creationModeRulerPlayColumnHeight()
+            windowWidth = (rulerW + rulerFrameInnerPad).coerceAtMost(maxWindowWidth)
+            windowHeightFixed = null
+            cardOuterHeight = headerHeight + 1.dp + rulerH + rulerFrameInnerPad
+        } else {
+            windowWidth = minOf(maxWindowWidth, maxWindowHeight * windowAspectRatio)
+            windowHeightFixed =
+                if (windowAspectRatio == 0f) 0.dp else windowWidth / windowAspectRatio
+            cardOuterHeight = windowHeightFixed
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -1192,67 +1472,56 @@ private fun TutorialWindow(
                 }
         )
 
-        // Rounded window: same outer size for all steps; part 4 fits the switch header inside (shape area is shorter).
-        Box(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .size(width = windowWidth, height = windowHeight)
-                .background(
-                    color = scheme.surfaceVariant.copy(alpha = 0.22f),
-                    shape = RoundedCornerShape(22.dp)
-                )
-                .border(
-                    width = 1.5.dp,
-                    color = scheme.outline.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(22.dp)
-                )
-                .padding(12.dp)
-        ) {
-            if (insideWindowHeader != null) {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(headerHeight)
-                            .background(
-                                color = scheme.surfaceContainerHigh.copy(alpha = 0.92f),
-                                shape = RoundedCornerShape(topStart = 12.dp, topEnd = 12.dp)
-                            )
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        insideWindowHeader()
-                    }
-                    HorizontalDivider(
-                        color = scheme.outline.copy(alpha = 0.45f),
-                        thickness = 1.dp
-                    )
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
-                            .background(scheme.surface.copy(alpha = 0.08f))
-                    ) {
-                        content()
-                    }
-                }
-            } else {
-                content()
-            }
-        }
-
-        // Drawn in a separate layer so layout never recenters the play area above.
-        if (belowMiniWindowContent != null) {
-            val explainTop = maxHeight / 2 + windowHeight / 2 + 8.dp
+        if (stackExplainBelow) {
             Column(
                 modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset(y = explainTop)
-                    .fillMaxWidth()
-                    .padding(horizontal = outerMargin),
+                    .fillMaxSize()
+                    .padding(top = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                belowMiniWindowContent()
+                TutorialRoundedMiniWindowFrame(
+                    modifier = Modifier,
+                    windowWidth = windowWidth,
+                    windowHeight = windowHeightFixed,
+                    scheme = scheme,
+                    headerHeight = headerHeight,
+                    insideWindowHeader = insideWindowHeader,
+                    content = content
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(explainScrollState)
+                        .padding(horizontal = outerMargin)
+                        .padding(top = 10.dp, bottom = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    belowMiniWindowContent()
+                }
+            }
+        } else {
+            TutorialRoundedMiniWindowFrame(
+                modifier = Modifier.align(Alignment.Center),
+                windowWidth = windowWidth,
+                windowHeight = windowHeightFixed,
+                scheme = scheme,
+                headerHeight = headerHeight,
+                insideWindowHeader = insideWindowHeader,
+                content = content
+            )
+            if (belowMiniWindowContent != null) {
+                val explainTop = maxHeight / 2 + cardOuterHeight / 2 + 8.dp
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .offset(y = explainTop)
+                        .fillMaxWidth()
+                        .padding(horizontal = outerMargin),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    belowMiniWindowContent()
+                }
             }
         }
     }

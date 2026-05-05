@@ -80,13 +80,38 @@ private fun rulerExpandedPanelWidth(isSideBar: Boolean): Dp =
 /** Width of the floating play-mode ruler column (for screen placement). */
 fun rulerFloatingPlayPanelWidth(): Dp = rulerExpandedPanelWidth(isSideBar = false)
 
+/**
+ * Vertical size of the three-strip play ruler ([CreationModeRuler] non-sidebar).
+ * Kept in sync with strip padding + [RulerStripPrimaryStride] rows + column spacing.
+ */
+fun creationModeRulerPlayColumnHeight(): Dp {
+    val stripOuterHeight = RulerStripPrimaryStride + 16.dp // inner strip vertical padding 8+8
+    val gapsBetweenStrips = 8.dp + 8.dp // spacedBy(8.dp) between three strips
+    val columnVerticalPadding = 8.dp + 8.dp // CreationModeRuler column padding
+    return stripOuterHeight * 3 + gapsBetweenStrips + columnVerticalPadding
+}
+
+/**
+ * Optional modifiers on ruler controls for tutorials (e.g. callout anchor measurement).
+ * Defaults are no-ops and do not affect normal play.
+ */
+data class CreationRulerTutorialAnchors(
+    val row1Play: Modifier = Modifier,
+    val row1Hue: Modifier = Modifier,
+    val row1Pin: Modifier = Modifier,
+    val row1Timed: Modifier = Modifier,
+    val shapeStrip: Modifier = Modifier,
+    val colorStrip: Modifier = Modifier
+)
+
 @Composable
 fun CreationModeRuler(
     session: CreationSession,
     onSessionChange: (CreationSession) -> Unit,
     onCollapse: () -> Unit,
     isSideBar: Boolean,
-    maxHeight: Dp
+    maxHeight: Dp,
+    tutorialAnchors: CreationRulerTutorialAnchors = CreationRulerTutorialAnchors()
 ) {
     val scheme = MaterialTheme.colorScheme
     val panelWidth = rulerExpandedPanelWidth(isSideBar)
@@ -104,10 +129,26 @@ fun CreationModeRuler(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         RulerStripSurface(includePeekInViewportCap = false) {
-            RulerPhysicsControlButton(session = session, onSessionChange = onSessionChange)
-            RulerHueLockControlButton(session = session, onSessionChange = onSessionChange)
-            RulerPinControlButton(session = session, onSessionChange = onSessionChange)
-            RulerLifetimeControlButton(session = session, onSessionChange = onSessionChange)
+            RulerPhysicsControlButton(
+                session = session,
+                onSessionChange = onSessionChange,
+                anchorModifier = tutorialAnchors.row1Play
+            )
+            RulerHueLockControlButton(
+                session = session,
+                onSessionChange = onSessionChange,
+                anchorModifier = tutorialAnchors.row1Hue
+            )
+            RulerPinControlButton(
+                session = session,
+                onSessionChange = onSessionChange,
+                anchorModifier = tutorialAnchors.row1Pin
+            )
+            RulerLifetimeControlButton(
+                session = session,
+                onSessionChange = onSessionChange,
+                anchorModifier = tutorialAnchors.row1Timed
+            )
             IconButton(
                 onClick = onCollapse,
                 modifier = Modifier.size(44.dp),
@@ -121,7 +162,10 @@ fun CreationModeRuler(
                 )
             }
         }
-        RulerStripSurface(includePeekInViewportCap = false) {
+        RulerStripSurface(
+            includePeekInViewportCap = false,
+            stripModifier = tutorialAnchors.shapeStrip
+        ) {
             ShapeSelectionIconChip(
                 selected = true,
                 onClick = {
@@ -168,7 +212,10 @@ fun CreationModeRuler(
                 }
             }
         }
-        RulerStripSurface(includePeekInViewportCap = true) {
+        RulerStripSurface(
+            includePeekInViewportCap = true,
+            stripModifier = tutorialAnchors.colorStrip
+        ) {
             ShapeSelectionIconChip(
                 selected = session.spawnColor == null,
                 onClick = { onSessionChange(session.copy(spawnColor = null)) },
@@ -224,12 +271,13 @@ fun CreationModeRuler(
 @Composable
 private fun RulerStripSurface(
     includePeekInViewportCap: Boolean,
+    stripModifier: Modifier = Modifier,
     content: @Composable RowScope.() -> Unit
 ) {
     val scheme = MaterialTheme.colorScheme
     val scrollState = rememberScrollState()
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = stripModifier.fillMaxWidth(),
         shape = RoundedCornerShape(18.dp),
         color = scheme.surfaceContainerLow,
         border = BorderStroke(1.dp, scheme.outlineVariant.copy(alpha = 0.32f)),
@@ -266,7 +314,8 @@ private fun RulerStripSurface(
 @Composable
 private fun RulerPhysicsControlButton(
     session: CreationSession,
-    onSessionChange: (CreationSession) -> Unit
+    onSessionChange: (CreationSession) -> Unit,
+    anchorModifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     val physicsPaused = session.physicsPaused
@@ -284,7 +333,7 @@ private fun RulerPhysicsControlButton(
     )
     FilledTonalIconButton(
         onClick = { onSessionChange(session.copy(physicsPaused = !session.physicsPaused)) },
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier.size(44.dp).then(anchorModifier),
         colors = physicsColors
     ) {
         if (session.physicsPaused) {
@@ -306,7 +355,8 @@ private fun RulerPhysicsControlButton(
 @Composable
 private fun RulerHueLockControlButton(
     session: CreationSession,
-    onSessionChange: (CreationSession) -> Unit
+    onSessionChange: (CreationSession) -> Unit,
+    anchorModifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
@@ -332,7 +382,7 @@ private fun RulerHueLockControlButton(
                 )
             )
         },
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier.size(44.dp).then(anchorModifier),
         colors = lockColors
     ) {
         if (session.disableHueWhileDragging) {
@@ -371,7 +421,8 @@ private fun RulerHueLockControlButton(
 @Composable
 private fun RulerPinControlButton(
     session: CreationSession,
-    onSessionChange: (CreationSession) -> Unit
+    onSessionChange: (CreationSession) -> Unit,
+    anchorModifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
@@ -389,7 +440,7 @@ private fun RulerPinControlButton(
     )
     FilledTonalIconButton(
         onClick = { onSessionChange(session.copy(newShapesPinned = !session.newShapesPinned)) },
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier.size(44.dp).then(anchorModifier),
         colors = pinColors
     ) {
         Icon(
@@ -411,7 +462,8 @@ private fun RulerPinControlButton(
 @Composable
 private fun RulerLifetimeControlButton(
     session: CreationSession,
-    onSessionChange: (CreationSession) -> Unit
+    onSessionChange: (CreationSession) -> Unit,
+    anchorModifier: Modifier = Modifier
 ) {
     val scheme = MaterialTheme.colorScheme
     val idleSurface = scheme.surfaceContainerHighest.copy(alpha = 0.78f)
@@ -429,7 +481,7 @@ private fun RulerLifetimeControlButton(
     )
     FilledTonalIconButton(
         onClick = { onSessionChange(session.copy(newShapesImmortal = !session.newShapesImmortal)) },
-        modifier = Modifier.size(44.dp),
+        modifier = Modifier.size(44.dp).then(anchorModifier),
         colors = immortalColors
     ) {
         Icon(
