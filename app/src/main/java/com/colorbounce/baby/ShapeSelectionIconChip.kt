@@ -123,7 +123,7 @@ fun ShapeOutlineGlyph(
                 )
             }
             ShapeType.STAR, ShapeType.HEART, ShapeType.DIAMOND -> {
-                val fake = GameShape(
+                val fake = GameShape.create(
                     id = 0L,
                     type = type,
                     x = size.width / 2f,

@@ -18,9 +18,23 @@ import java.util.concurrent.atomic.AtomicInteger
 
 private const val TAG = "GameViewModel"
 
+/**
+ * Wraps the body list with a monotonically-increasing [tick] so [MutableStateFlow] emits every
+ * frame even though the underlying [GameShape] instances are reused.
+ */
+data class ShapesFrame(val tick: Long, val shapes: List<GameShape>)
+
 class GameViewModel : ViewModel() {
-    private val _shapes = MutableStateFlow<List<GameShape>>(emptyList())
-    val shapes: StateFlow<List<GameShape>> = _shapes.asStateFlow()
+
+    private val bodies: MutableList<GameShape> = mutableListOf()
+    private var frameTick: Long = 0L
+
+    private val _shapes = MutableStateFlow(ShapesFrame(0L, emptyList()))
+    val shapes: StateFlow<ShapesFrame> = _shapes.asStateFlow()
+
+    private val spatialGrid = SpatialGrid()
+    private val collisionDispatcher = CollisionDispatcher()
+    private val collisionResolver = CollisionResolver()
 
     private var nextId = 1L
     private val lastTypeIndex = AtomicInteger(0)
@@ -28,9 +42,9 @@ class GameViewModel : ViewModel() {
     private val startPoints = mutableMapOf<Long, Offset>()
     private val lastDragDeltas = mutableMapOf<Long, Offset>()
     /**
-     * Shape ids still in the finger-down “draw” gesture (before [endInteraction]).
+     * Shape ids still in the finger-down "draw" gesture (before [endInteraction]).
      * Resize-on-drag applies only while id is in this set — not after creation ends, even if vx/vy are zero.
-     * During this window, ruler “pin all” does not block resizing; pin takes effect when the gesture ends.
+     * During this window, ruler "pin all" does not block resizing; pin takes effect when the gesture ends.
      */
     private val fingerCreatedShapeIds = mutableSetOf<Long>()
     private var screenSize = Offset(1f, 1f)
@@ -87,15 +101,16 @@ class GameViewModel : ViewModel() {
         if (creation != null) CREATION_MAX_SHAPES.coerceIn(1, 10_000)
         else settings.maxShapes.coerceIn(1, 100)
 
-    fun shapeAt(point: Offset): GameShape? = _shapes.value.lastOrNull { pointInShape(point, it) }
+    fun shapeAt(point: Offset): GameShape? = bodies.lastOrNull { pointInShape(point, it) }
 
     fun activeShapeIdFor(pointerId: Long): Long? = activeShapes[pointerId]
 
     fun removeShape(id: Long) {
-        _shapes.value = _shapes.value.filter { it.id != id }
+        bodies.removeAll { it.id == id }
         val toRemove = activeShapes.filter { it.value == id }.keys
         toRemove.forEach { cleanupPointer(it) }
         fingerCreatedShapeIds.remove(id)
+        publish()
     }
 
     /** Drops stale pointer capture for [shapeId] (e.g. shape menu overlay gesture cancelled mid-drag). */
@@ -106,43 +121,41 @@ class GameViewModel : ViewModel() {
     }
 
     fun setShapePinned(id: Long, pinned: Boolean) {
-        _shapes.value = _shapes.value.map { if (it.id == id) it.copy(isPinned = pinned) else it }
+        findById(id)?.isPinned = pinned
+        publish()
     }
 
     fun setShapeImmortal(id: Long, immortal: Boolean) {
-        _shapes.value = _shapes.value.map { if (it.id == id) it.copy(isImmortal = immortal) else it }
+        findById(id)?.isImmortal = immortal
+        publish()
     }
 
     fun setShapeExemptFromGlobalPin(id: Long, exempt: Boolean) {
-        _shapes.value = _shapes.value.map {
-            if (it.id == id) it.copy(exemptFromGlobalPin = exempt) else it
-        }
+        findById(id)?.exemptFromGlobalPin = exempt
+        publish()
     }
 
     fun setShapeExemptFromGlobalImmortal(id: Long, exempt: Boolean) {
-        _shapes.value = _shapes.value.map {
-            if (it.id == id) it.copy(exemptFromGlobalImmortal = exempt) else it
-        }
+        findById(id)?.exemptFromGlobalImmortal = exempt
+        publish()
     }
 
     /** Ruler pin toggle: applies to every shape; clears per-shape exemptions. */
     fun applyGlobalPinFromRuler(allPinned: Boolean) {
-        _shapes.value = _shapes.value.map {
-            it.copy(
-                exemptFromGlobalPin = false,
-                isPinned = allPinned
-            )
+        for (b in bodies) {
+            b.exemptFromGlobalPin = false
+            b.isPinned = allPinned
         }
+        publish()
     }
 
     /** Ruler lifetime toggle: applies to every shape; clears per-shape exemptions. */
     fun applyGlobalImmortalFromRuler(allImmortal: Boolean) {
-        _shapes.value = _shapes.value.map {
-            it.copy(
-                exemptFromGlobalImmortal = false,
-                isImmortal = allImmortal
-            )
+        for (b in bodies) {
+            b.exemptFromGlobalImmortal = false
+            b.isImmortal = allImmortal
         }
+        publish()
     }
 
     private fun effectiveIsPinned(shape: GameShape, creation: CreationSession?): Boolean {
@@ -164,15 +177,13 @@ class GameViewModel : ViewModel() {
     }
 
     fun setShapeFreezeHueWhileDragging(id: Long, freeze: Boolean) {
-        _shapes.value = _shapes.value.map {
-            if (it.id == id) it.copy(freezeHueWhileDragging = freeze) else it
-        }
+        findById(id)?.freezeHueWhileDragging = freeze
+        publish()
     }
 
     fun setShapeExemptFromGlobalHueLock(id: Long, exempt: Boolean) {
-        _shapes.value = _shapes.value.map {
-            if (it.id == id) it.copy(exemptFromGlobalHueLock = exempt) else it
-        }
+        findById(id)?.exemptFromGlobalHueLock = exempt
+        publish()
     }
 
     private fun hueFrozenWhileDragging(
@@ -197,8 +208,7 @@ class GameViewModel : ViewModel() {
     ) {
         try {
             recordInteraction()
-            val current = _shapes.value
-            val hit = current.lastOrNull { pointInShape(point, it) }
+            val hit = bodies.lastOrNull { pointInShape(point, it) }
             if (hit != null) {
                 Log.d(TAG, "Interaction: Tapped existing shape id=${hit.id}")
                 activeShapes[pointerId] = hit.id
@@ -208,7 +218,7 @@ class GameViewModel : ViewModel() {
                 return
             }
 
-            if (creation != null && current.size >= effectiveMaxShapes(creation, settings)) {
+            if (creation != null && bodies.size >= effectiveMaxShapes(creation, settings)) {
                 _creationAtCapacity.tryEmit(Unit)
                 return
             }
@@ -233,7 +243,7 @@ class GameViewModel : ViewModel() {
                 )
             }
             val imm = settings.shapeTimeoutImmortal || (creation?.newShapesImmortal == true)
-            val newShape = GameShape(
+            val newShape = GameShape.create(
                 id = nextId++,
                 type = newType,
                 x = spawnPoint.x,
@@ -255,11 +265,13 @@ class GameViewModel : ViewModel() {
             lastDragDeltas[pointerId] = Offset.Zero
 
             val em = effectiveMaxShapes(creation, settings)
-            _shapes.value = (current + newShape).takeLast(em)
+            bodies.add(newShape)
+            trimToMax(em)
             Log.d(
                 TAG,
-                "Interaction: Created new shape id=${newShape.id}, type=$newType, pointerId=$pointerId, totalShapes=${_shapes.value.size}"
+                "Interaction: Created new shape id=${newShape.id}, type=$newType, pointerId=$pointerId, totalShapes=${bodies.size}"
             )
+            publish()
         } catch (e: Exception) {
             Log.e(TAG, "Error in startInteraction", e)
         }
@@ -282,32 +294,30 @@ class GameViewModel : ViewModel() {
             val dragDistance = (point - startPoint).getDistance()
             val computedSize = dragDistance.coerceIn(40f, 500f)
             val now = currentGameTimeMillis()
-            _shapes.value = _shapes.value.map { shape ->
-                if (shape.id != shapeId) return@map shape
-                // While the finger is still down on a newly spawned shape, allow resize even if
-                // the ruler pins all shapes — pin semantics apply after [endInteraction] only.
-                val resizingSpawnGesture =
-                    resizeOnDrag && fingerCreatedShapeIds.contains(shape.id)
-                val targetSize = if (resizingSpawnGesture) computedSize else shape.width
-                val boundedSize = if (constrainInsideScreen) {
-                    targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
-                } else {
-                    targetSize
-                }
-                val boundedPoint = if (constrainInsideScreen) {
-                    clampPointInsideScreen(point, boundedSize / 2f, boundedSize / 2f)
-                } else {
-                    point
-                }
-                shape.copy(
-                    x = boundedPoint.x,
-                    y = boundedPoint.y,
-                    width = if (resizingSpawnGesture) boundedSize else shape.width,
-                    height = if (resizingSpawnGesture) boundedSize else shape.height,
-                    lastInteractionMillis = now
-                )
+            val shape = findById(shapeId) ?: return
+            // While the finger is still down on a newly spawned shape, allow resize even if
+            // the ruler pins all shapes — pin semantics apply after [endInteraction] only.
+            val resizingSpawnGesture = resizeOnDrag && fingerCreatedShapeIds.contains(shape.id)
+            val targetSize = if (resizingSpawnGesture) computedSize else shape.width
+            val boundedSize = if (constrainInsideScreen) {
+                targetSize.coerceAtMost(min(screenSize.x, screenSize.y))
+            } else {
+                targetSize
             }
+            val boundedPoint = if (constrainInsideScreen) {
+                clampPointInsideScreen(point, boundedSize / 2f, boundedSize / 2f)
+            } else {
+                point
+            }
+            shape.x = boundedPoint.x
+            shape.y = boundedPoint.y
+            if (resizingSpawnGesture) {
+                shape.width = boundedSize
+                shape.height = boundedSize
+            }
+            shape.lastInteractionMillis = now
             trimToMax(effectiveMaxShapes(creation, settings))
+            publish()
         } catch (e: Exception) {
             Log.e(TAG, "Error in onDrag for pointerId=$pointerId", e)
         }
@@ -324,64 +334,43 @@ class GameViewModel : ViewModel() {
             val shapeId = activeShapes[pointerId] ?: return
             val dragDelta = lastDragDeltas[pointerId] ?: Offset.Zero
             fingerCreatedShapeIds.remove(shapeId)
-            val shapeBeforeEnd = _shapes.value.find { it.id == shapeId }
-            val wasPinned = shapeBeforeEnd != null && effectiveIsPinned(shapeBeforeEnd, creation)
-            if (wasPinned) {
-                _shapes.value = _shapes.value.map {
-                    if (it.id == shapeId) {
-                        it.copy(
-                            vx = 0f,
-                            vy = 0f,
-                            lastInteractionMillis = currentGameTimeMillis()
-                        )
-                    } else {
-                        it
-                    }
-                }
+            val shapeBeforeEnd = findById(shapeId)
+            if (shapeBeforeEnd != null && effectiveIsPinned(shapeBeforeEnd, creation)) {
+                shapeBeforeEnd.vx = 0f
+                shapeBeforeEnd.vy = 0f
+                shapeBeforeEnd.lastInteractionMillis = currentGameTimeMillis()
                 cleanupPointer(pointerId)
+                publish()
                 return
             }
             if (!applyLaunchVelocity) {
-                _shapes.value = _shapes.value.map {
-                    if (it.id == shapeId) {
-                        it.copy(
-                            vx = 0f,
-                            vy = 0f,
-                            lastInteractionMillis = currentGameTimeMillis()
-                        )
-                    } else {
-                        it
-                    }
+                shapeBeforeEnd?.let {
+                    it.vx = 0f
+                    it.vy = 0f
+                    it.lastInteractionMillis = currentGameTimeMillis()
                 }
                 cleanupPointer(pointerId)
+                publish()
                 return
             }
             if (dragDelta == Offset.Zero) {
-                _shapes.value = _shapes.value.map {
-                    if (it.id == shapeId) {
-                        it.copy(lastInteractionMillis = currentGameTimeMillis())
-                    } else {
-                        it
-                    }
+                shapeBeforeEnd?.let {
+                    it.lastInteractionMillis = currentGameTimeMillis()
                 }
                 cleanupPointer(pointerId)
+                publish()
                 return
             }
             val rawVx = dragDelta.x * ShapeVelocity.LAUNCH_DRAG_FACTOR
             val rawVy = dragDelta.y * ShapeVelocity.LAUNCH_DRAG_FACTOR
             val (vx, vy) = ShapeVelocity.clamp(rawVx, rawVy, settings.maxVelocityPxPerSec.toFloat())
-            _shapes.value = _shapes.value.map {
-                if (it.id == shapeId) {
-                    it.copy(
-                        vx = vx,
-                        vy = vy,
-                        lastInteractionMillis = currentGameTimeMillis()
-                    )
-                } else {
-                    it
-                }
+            shapeBeforeEnd?.let {
+                it.vx = vx
+                it.vy = vy
+                it.lastInteractionMillis = currentGameTimeMillis()
             }
             cleanupPointer(pointerId)
+            publish()
             Log.d(TAG, "Interaction ended: shapeId=$shapeId, velocity=(${vx},${vy})")
         } catch (e: Exception) {
             Log.e(TAG, "Error in endInteraction for pointerId=$pointerId", e)
@@ -414,16 +403,14 @@ class GameViewModel : ViewModel() {
             val c = creation
             if ((c != null && c.physicsPaused) || physicsPausedForShapeContextMenu) {
                 val activeIds = activeShapes.values.toSet()
-                _shapes.value = _shapes.value.map { shape ->
-                    if (!activeIds.contains(shape.id)) return@map shape
+                for (shape in bodies) {
+                    if (!activeIds.contains(shape.id)) continue
                     val freezeHue = hueFrozenWhileDragging(c, shape, isHeld = true)
-                    val hue = if (freezeHue) {
-                        shape.hue
-                    } else {
-                        ShapeColorAnimator.stepHue(shape.hue, safeDelta)
+                    if (!freezeHue) {
+                        shape.hue = ShapeColorAnimator.stepHue(shape.hue, safeDelta)
                     }
-                    shape.copy(hue = hue)
                 }
+                publish()
                 return
             }
 
@@ -434,75 +421,94 @@ class GameViewModel : ViewModel() {
             checkAutoSpawn(now, settings, c)
 
             val activeIds = activeShapes.values.toSet()
-            val moved = _shapes.value.mapNotNull { shape ->
+            val maxSpeed = settings.maxVelocityPxPerSec.coerceIn(100, 3000).toFloat()
+
+            // Integrate + cull expired shapes.
+            val it = bodies.iterator()
+            while (it.hasNext()) {
+                val shape = it.next()
                 if (!effectiveIsImmortal(shape, c, settings)) {
                     if (now - shape.lastInteractionMillis > timeoutMs) {
                         Log.d(
                             TAG,
                             "Shape id=${shape.id} expired (timeout=${settings.shapeTimeoutSeconds}s, immortal=${settings.shapeTimeoutImmortal})"
                         )
-                        return@mapNotNull null
+                        it.remove()
+                        continue
                     }
                 }
 
                 val isHeld = activeIds.contains(shape.id)
-                var x = shape.x
-                var y = shape.y
-                var vx = shape.vx
-                var vy = shape.vy
-
                 if (!isHeld) {
                     if (effectiveIsPinned(shape, c)) {
-                        x = shape.x
-                        y = shape.y
-                        vx = 0f
-                        vy = 0f
+                        shape.vx = 0f
+                        shape.vy = 0f
                     } else {
-                        x = shape.x + shape.vx * safeDelta
-                        y = shape.y + shape.vy * safeDelta
+                        shape.x += shape.vx * safeDelta
+                        shape.y += shape.vy * safeDelta
                         val halfW = shape.width / 2f
                         val halfH = shape.height / 2f
-                        if (x - halfW < 0f) {
-                            x = halfW
-                            vx = abs(vx)
-                        } else if (x + halfW > width) {
-                            x = width - halfW
-                            vx = -abs(vx)
+                        if (shape.x - halfW < 0f) {
+                            shape.x = halfW
+                            shape.vx = abs(shape.vx)
+                        } else if (shape.x + halfW > width) {
+                            shape.x = width - halfW
+                            shape.vx = -abs(shape.vx)
                         }
-                        if (y - halfH < 0f) {
-                            y = halfH
-                            vy = abs(vy)
-                        } else if (y + halfH > height) {
-                            y = height - halfH
-                            vy = -abs(vy)
+                        if (shape.y - halfH < 0f) {
+                            shape.y = halfH
+                            shape.vy = abs(shape.vy)
+                        } else if (shape.y + halfH > height) {
+                            shape.y = height - halfH
+                            shape.vy = -abs(shape.vy)
                         }
                     }
-                } else {
-                    if (effectiveIsPinned(shape, c)) {
-                        vx = 0f
-                        vy = 0f
-                    }
+                } else if (effectiveIsPinned(shape, c)) {
+                    shape.vx = 0f
+                    shape.vy = 0f
                 }
 
                 val disableHue = hueFrozenWhileDragging(c, shape, isHeld)
-                val hue = if (isHeld && !disableHue) {
-                    ShapeColorAnimator.stepHue(shape.hue, safeDelta)
-                } else {
-                    shape.hue
+                if (isHeld && !disableHue) {
+                    shape.hue = ShapeColorAnimator.stepHue(shape.hue, safeDelta)
                 }
 
-                val (cvx, cvy) = ShapeVelocity.clamp(vx, vy, settings.maxVelocityPxPerSec.coerceIn(100, 3000).toFloat())
-                shape.copy(
-                    x = x,
-                    y = y,
-                    vx = cvx,
-                    vy = cvy,
-                    hue = hue
-                )
-            }.toMutableList()
+                val (cvx, cvy) = ShapeVelocity.clamp(shape.vx, shape.vy, maxSpeed)
+                shape.vx = cvx
+                shape.vy = cvy
+            }
 
-            resolvePairCollisions(moved, settings, c)
-            _shapes.value = moved.takeLast(em)
+            // Multi-pass narrow-phase + Baumgarte slop: pair order and compound MTV approximation leave
+            // residual overlap in one pass (circles vs stars/diamonds especially).
+            repeat(COLLISION_SOLVER_PASSES) {
+                for (shape in bodies) {
+                    shape.refreshAabb()
+                    shape.refreshHulls()
+                }
+                spatialGrid.rebuild(bodies, width, height)
+                spatialGrid.forEachCandidatePair { a, b ->
+                    val manifold = collisionDispatcher.evaluate(a, b) ?: return@forEachCandidatePair
+
+                    val aPin = effectiveIsPinned(a, c)
+                    val bPin = effectiveIsPinned(b, c)
+                    val aHeld = a.id in activeIds
+                    val bHeld = b.id in activeIds
+                    val aImmovable = aHeld || (aPin && !aHeld)
+                    val bImmovable = bHeld || (bPin && !bHeld)
+
+                    collisionResolver.resolve(
+                        a, b, manifold,
+                        aImmovable = aImmovable,
+                        bImmovable = bImmovable,
+                        maxSpeed = maxSpeed,
+                        screenW = width,
+                        screenH = height
+                    )
+                }
+            }
+
+            trimToMax(em)
+            publish()
         } catch (e: Exception) {
             Log.e(TAG, "Error in updatePhysics", e)
         }
@@ -529,7 +535,7 @@ class GameViewModel : ViewModel() {
     private fun spawnRandomShape(settings: AppSettings, creation: CreationSession? = null) {
         try {
             val em = effectiveMaxShapes(creation, settings)
-            if (_shapes.value.size >= em) return
+            if (bodies.size >= em) return
 
             val w = screenSize.x
             val h = screenSize.y
@@ -558,7 +564,7 @@ class GameViewModel : ViewModel() {
             } else {
                 false to settings.shapeTimeoutImmortal
             }
-            val newShape = GameShape(
+            val newShape = GameShape.create(
                 id = nextId++,
                 type = newType,
                 x = rx,
@@ -574,8 +580,12 @@ class GameViewModel : ViewModel() {
                 isPinned = pin,
                 isImmortal = imm
             )
-            _shapes.value = (_shapes.value + newShape).takeLast(em)
-            Log.d(TAG, "Auto-spawned shape: id=${newShape.id}, type=${newShape.type}, totalShapes=${_shapes.value.size}")
+            bodies.add(newShape)
+            trimToMax(em)
+            Log.d(TAG, "Auto-spawned shape: id=${newShape.id}, type=${newShape.type}, totalShapes=${bodies.size}")
+            // The physics tick already publishes after every step; explicit publish here keeps
+            // capture-mode insertions visible if they happen between ticks.
+            publish()
         } catch (e: Exception) {
             Log.e(TAG, "Error in spawnRandomShape", e)
         }
@@ -610,149 +620,6 @@ class GameViewModel : ViewModel() {
         return gameTimeMillis
     }
 
-    private fun resolvePairCollisions(
-        shapes: MutableList<GameShape>,
-        settings: AppSettings,
-        creation: CreationSession? = null
-    ) {
-        try {
-            val heldIds = activeShapes.values.toSet()
-            for (i in 0 until shapes.size) {
-                for (j in i + 1 until shapes.size) {
-                    val a = shapes[i]
-                    val b = shapes[j]
-
-                    val manifold = computePairCollision(a, b) ?: continue
-
-                    val aPin = effectiveIsPinned(a, creation)
-                    val bPin = effectiveIsPinned(b, creation)
-                    if (aPin && a.id !in heldIds && bPin && b.id !in heldIds) continue
-
-                    val nx = manifold.nx
-                    val ny = manifold.ny
-                    val overlap = manifold.overlap
-
-                    when {
-                        a.id in heldIds -> {
-                            val bX = b.x + nx * overlap
-                            val bY = b.y + ny * overlap
-                            val bVn = b.vx * nx + b.vy * ny
-                            val bTx = b.vx - bVn * nx
-                            val bTy = b.vy - bVn * ny
-                            var newB = b.copy(
-                                x = bX,
-                                y = bY,
-                                vx = bTx - bVn * nx,
-                                vy = bTy - bVn * ny
-                            )
-                            val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
-                            newB = newB.copy(vx = bc.first, vy = bc.second)
-                            shapes[i] = keepInside(a)
-                            shapes[j] = keepInside(newB)
-                        }
-                        b.id in heldIds -> {
-                            val aX = a.x - nx * overlap
-                            val aY = a.y - ny * overlap
-                            val aVn = a.vx * nx + a.vy * ny
-                            val aTx = a.vx - aVn * nx
-                            val aTy = a.vy - aVn * ny
-                            var newA = a.copy(
-                                x = aX,
-                                y = aY,
-                                vx = aTx - aVn * nx,
-                                vy = aTy - aVn * ny
-                            )
-                            val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
-                            newA = newA.copy(vx = ac.first, vy = ac.second)
-                            shapes[i] = keepInside(newA)
-                            shapes[j] = keepInside(b)
-                        }
-                        aPin && a.id !in heldIds -> {
-                            val bX = b.x + nx * overlap
-                            val bY = b.y + ny * overlap
-                            val bVn = b.vx * nx + b.vy * ny
-                            val bTx = b.vx - bVn * nx
-                            val bTy = b.vy - bVn * ny
-                            var newB = b.copy(
-                                x = bX,
-                                y = bY,
-                                vx = bTx - bVn * nx,
-                                vy = bTy - bVn * ny
-                            )
-                            val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
-                            newB = newB.copy(vx = bc.first, vy = bc.second)
-                            shapes[i] = keepInside(a)
-                            shapes[j] = keepInside(newB)
-                        }
-                        bPin && b.id !in heldIds -> {
-                            val aX = a.x - nx * overlap
-                            val aY = a.y - ny * overlap
-                            val aVn = a.vx * nx + a.vy * ny
-                            val aTx = a.vx - aVn * nx
-                            val aTy = a.vy - aVn * ny
-                            var newA = a.copy(
-                                x = aX,
-                                y = aY,
-                                vx = aTx - aVn * nx,
-                                vy = aTy - aVn * ny
-                            )
-                            val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
-                            newA = newA.copy(vx = ac.first, vy = ac.second)
-                            shapes[i] = keepInside(newA)
-                            shapes[j] = keepInside(b)
-                        }
-                        else -> {
-                            val massA = a.width * a.height
-                            val massB = b.width * b.height
-                            val totalMass = massA + massB
-                            val aX = a.x - nx * overlap * 0.5f
-                            val aY = a.y - ny * overlap * 0.5f
-                            val bX = b.x + nx * overlap * 0.5f
-                            val bY = b.y + ny * overlap * 0.5f
-                            val aVn = a.vx * nx + a.vy * ny
-                            val bVn = b.vx * nx + b.vy * ny
-                            val aTx = a.vx - aVn * nx
-                            val aTy = a.vy - aVn * ny
-                            val bTx = b.vx - bVn * nx
-                            val bTy = b.vy - bVn * ny
-                            val aVnNew = ((massA - massB) / totalMass) * aVn + (2f * massB / totalMass) * bVn
-                            val bVnNew = (2f * massA / totalMass) * aVn + ((massB - massA) / totalMass) * bVn
-                            var newA = a.copy(
-                                x = aX,
-                                y = aY,
-                                vx = aTx + aVnNew * nx,
-                                vy = aTy + aVnNew * ny
-                            )
-                            var newB = b.copy(
-                                x = bX,
-                                y = bY,
-                                vx = bTx + bVnNew * nx,
-                                vy = bTy + bVnNew * ny
-                            )
-                            val ac = ShapeVelocity.clamp(newA.vx, newA.vy, settings.maxVelocityPxPerSec.toFloat())
-                            val bc = ShapeVelocity.clamp(newB.vx, newB.vy, settings.maxVelocityPxPerSec.toFloat())
-                            newA = newA.copy(vx = ac.first, vy = ac.second)
-                            newB = newB.copy(vx = bc.first, vy = bc.second)
-                            shapes[i] = keepInside(newA)
-                            shapes[j] = keepInside(newB)
-                        }
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error in resolvePairCollisions", e)
-        }
-    }
-
-    private fun keepInside(shape: GameShape): GameShape {
-        val halfW = shape.width / 2f
-        val halfH = shape.height / 2f
-        return shape.copy(
-            x = min(max(shape.x, halfW), screenSize.x - halfW),
-            y = min(max(shape.y, halfH), screenSize.y - halfH)
-        )
-    }
-
     private fun clampPointInsideScreen(point: Offset, halfW: Float, halfH: Float): Offset {
         val minX = halfW
         val maxX = (screenSize.x - halfW).coerceAtLeast(minX)
@@ -765,19 +632,18 @@ class GameViewModel : ViewModel() {
     }
 
     private fun trimToMax(maxShapes: Int) {
-        _shapes.value = _shapes.value.takeLast(maxShapes.coerceAtLeast(1))
+        val cap = maxShapes.coerceAtLeast(1)
+        while (bodies.size > cap) {
+            // Drop the oldest entries to preserve takeLast semantics.
+            bodies.removeAt(0)
+        }
     }
 
     /** Refreshes per-shape timeout ([GameShape.lastInteractionMillis]), e.g. after interaction or selection. */
     fun resetShapeLifetimeTimer(id: Long) {
         val now = currentGameTimeMillis()
-        _shapes.value = _shapes.value.map {
-            if (it.id == id) {
-                it.copy(lastInteractionMillis = now)
-            } else {
-                it
-            }
-        }
+        findById(id)?.lastInteractionMillis = now
+        publish()
     }
 
     private fun chooseType(selectedShapes: Set<ShapeType>, selectionMode: ShapeSelectionMode): ShapeType {
@@ -816,6 +682,13 @@ class GameViewModel : ViewModel() {
             ShapeType.STAR, ShapeType.HEART, ShapeType.DIAMOND ->
                 pointInPolygonShapeStroke(point.x, point.y, shape)
         }
+    }
+
+    private fun findById(id: Long): GameShape? = bodies.firstOrNull { it.id == id }
+
+    private fun publish() {
+        frameTick++
+        _shapes.value = ShapesFrame(frameTick, ArrayList(bodies))
     }
 
     private fun calmSaturation(): Float = (0.55f + Random.nextFloat() * 0.18f).coerceIn(0f, 1f)

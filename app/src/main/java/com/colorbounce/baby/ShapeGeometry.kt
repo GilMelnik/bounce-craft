@@ -14,7 +14,7 @@ internal const val POLYGON_EDGE_SLOP_PX = 28f
 
 /** Pentagram inner vertex radius / outer radius — classic proportion. */
 private const val STAR_INNER_RATIO = 0.382f
-private const val HEART_SAMPLES = 48
+internal const val HEART_SAMPLES = 48
 
 internal fun usesPolygonPhysics(type: ShapeType): Boolean =
     type == ShapeType.STAR || type == ShapeType.HEART || type == ShapeType.DIAMOND

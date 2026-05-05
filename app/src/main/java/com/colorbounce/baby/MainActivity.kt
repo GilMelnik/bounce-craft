@@ -873,7 +873,8 @@ private fun GameScreen(
     viewModel: GameViewModel,
     onExit: () -> Unit
 ) {
-    val shapes by viewModel.shapes.collectAsStateWithLifecycle(emptyList())
+    val shapeFrame by viewModel.shapes.collectAsStateWithLifecycle(ShapesFrame(0L, emptyList()))
+    val shapes = shapeFrame.shapes
     var contextMenuShapeId by remember { mutableStateOf<Long?>(null) }
     var showAtCapacity by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()

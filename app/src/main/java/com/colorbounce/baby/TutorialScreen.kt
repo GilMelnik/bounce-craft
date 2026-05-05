@@ -145,7 +145,8 @@ private fun CreateShapeTutorialStep(onAdvance: () -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val settings = remember { tutorialSettings() }
     val viewModel = remember { GameViewModel() }
-    val shapes by viewModel.shapes.collectAsState(emptyList())
+    val shapeFrame by viewModel.shapes.collectAsState(ShapesFrame(0L, emptyList()))
+    val shapes = shapeFrame.shapes
 
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
     var stageCompleted by remember { mutableStateOf(false) }
@@ -251,7 +252,8 @@ private fun CreateShapeTutorialStep(onAdvance: () -> Unit) {
 private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
     val settings = remember { tutorialSettings(maxVelocity = 1800) }
     val viewModel = remember { GameViewModel() }
-    val shapes by viewModel.shapes.collectAsState(emptyList())
+    val shapeFrame by viewModel.shapes.collectAsState(ShapesFrame(0L, emptyList()))
+    val shapes = shapeFrame.shapes
 
     var sceneSize by remember { mutableStateOf(IntSize.Zero) }
     var releasedShapeId by remember { mutableStateOf<Long?>(null) }
@@ -398,7 +400,8 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
 private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
     val settings = remember { tutorialSettings(maxVelocity = 1800) }
     val viewModel = remember { GameViewModel() }
-    val shapes by viewModel.shapes.collectAsState(emptyList())
+    val shapeFrame by viewModel.shapes.collectAsState(ShapesFrame(0L, emptyList()))
+    val shapes = shapeFrame.shapes
 
     var playgroundSize by remember { mutableStateOf(IntSize.Zero) }
     var initialCenter by remember { mutableStateOf<Offset?>(null) }
@@ -447,7 +450,7 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
                     constrainInsideScreen = true
                 )
                 viewModel.endInteraction(settings, pointerId, applyLaunchVelocity = false)
-                val placed = viewModel.shapes.value.firstOrNull()
+                val placed = viewModel.shapes.value.shapes.firstOrNull()
                 initialCenter = placed?.let { Offset(it.x, it.y) } ?: start
             }
         }
@@ -635,7 +638,8 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
     val isLandscape = configuration.screenWidthDp > configuration.screenHeightDp
     val settings = remember { tutorialSettings(maxVelocity = 1800) }
     val viewModel = remember { GameViewModel() }
-    val shapes by viewModel.shapes.collectAsState(emptyList())
+    val shapeFrame by viewModel.shapes.collectAsState(ShapesFrame(0L, emptyList()))
+    val shapes = shapeFrame.shapes
 
     var playgroundSize by remember { mutableStateOf(IntSize.Zero) }
     var menuRevealed by rememberSaveable { mutableStateOf(false) }

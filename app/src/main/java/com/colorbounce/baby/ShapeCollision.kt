@@ -4,16 +4,8 @@ import androidx.compose.ui.geometry.Offset
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sign
 
 private const val EPS = 1e-4f
-
-/** Normal points from a toward b; overlap is penetration depth along that normal. */
-internal data class CollisionManifold(
-    val nx: Float,
-    val ny: Float,
-    val overlap: Float
-)
 
 /** Matches [GamePlayfield] arch stroke width. */
 internal fun archStrokeWidth(shape: GameShape): Float {
@@ -34,22 +26,16 @@ internal fun archInnerRadius(shape: GameShape): Float =
 internal fun archOuterRadius(shape: GameShape): Float =
     archMidRadius(shape) + archStrokeWidth(shape) / 2f
 
-internal fun collisionRadius(shape: GameShape): Float =
-    when (shape.type) {
-        ShapeType.CIRCLE -> shape.width / 2f
-        else -> max(shape.width, shape.height) / 2f
-    }
-
-private enum class ArchBoundaryFeature {
+internal enum class ArchBoundaryFeatureKind {
     OUTER_ARC,
     INNER_ARC,
     CAP
 }
 
-private data class ArchBoundaryClosest(
+internal data class ArchBoundaryClosest(
     val x: Float,
     val y: Float,
-    val feature: ArchBoundaryFeature
+    val feature: ArchBoundaryFeatureKind
 )
 
 /**
@@ -101,7 +87,7 @@ private fun closestPointOnHorizontalSegment(
  * Closest point on the boundary of the arch **solid** (stroked top semicircle band):
  * outer arc, inner arc, and the two horizontal side caps between radii.
  */
-private fun closestOnArchSolidBoundary(arch: GameShape, px: Float, py: Float): ArchBoundaryClosest {
+internal fun closestOnArchSolidBoundary(arch: GameShape, px: Float, py: Float): ArchBoundaryClosest {
     val c = archCircleCenter(arch)
     val cx = c.x
     val cy = c.y
@@ -114,10 +100,10 @@ private fun closestOnArchSolidBoundary(arch: GameShape, px: Float, py: Float): A
     val rightCap = closestPointOnHorizontalSegment(px, py, cx + rIn, cx + rOut, cy)
 
     val candidates = listOf(
-        ArchBoundaryClosest(outer.first, outer.second, ArchBoundaryFeature.OUTER_ARC),
-        ArchBoundaryClosest(inner.first, inner.second, ArchBoundaryFeature.INNER_ARC),
-        ArchBoundaryClosest(leftCap.first, leftCap.second, ArchBoundaryFeature.CAP),
-        ArchBoundaryClosest(rightCap.first, rightCap.second, ArchBoundaryFeature.CAP)
+        ArchBoundaryClosest(outer.first, outer.second, ArchBoundaryFeatureKind.OUTER_ARC),
+        ArchBoundaryClosest(inner.first, inner.second, ArchBoundaryFeatureKind.INNER_ARC),
+        ArchBoundaryClosest(leftCap.first, leftCap.second, ArchBoundaryFeatureKind.CAP),
+        ArchBoundaryClosest(rightCap.first, rightCap.second, ArchBoundaryFeatureKind.CAP)
     )
     return candidates.minBy { hypot(px - it.x, py - it.y) }
 }
@@ -152,96 +138,4 @@ internal fun pointInArchStroke(px: Float, py: Float, shape: GameShape, edgeSlopP
     if (pointInArchSolid(px, py, shape)) return true
     val cl = closestOnArchSolidBoundary(shape, px, py)
     return hypot(px - cl.x, py - cl.y) <= edgeSlopPx
-}
-
-private fun manifoldArchVsCircle(
-    arch: GameShape,
-    ox: Float,
-    oy: Float,
-    otherRadius: Float
-): CollisionManifold? {
-    val closest = closestOnArchSolidBoundary(arch, ox, oy)
-    val c = archCircleCenter(arch)
-    val dx = ox - closest.x
-    val dy = oy - closest.y
-    val dist = hypot(dx, dy)
-    if (dist < EPS) {
-        val nn = when (closest.feature) {
-            ArchBoundaryFeature.OUTER_ARC -> {
-                val vx = ox - c.x
-                val vy = oy - c.y
-                val vlen = hypot(vx, vy)
-                if (vlen < EPS) Pair(0f, -1f) else Pair(vx / vlen, vy / vlen)
-            }
-            ArchBoundaryFeature.INNER_ARC -> {
-                val vx = ox - c.x
-                val vy = oy - c.y
-                val vlen = hypot(vx, vy)
-                if (vlen < EPS) Pair(0f, 1f) else Pair(vx / vlen, vy / vlen)
-            }
-            ArchBoundaryFeature.CAP -> {
-                val towardBall = oy - closest.y
-                when {
-                    kotlin.math.abs(towardBall) < EPS -> Pair(0f, -1f)
-                    else -> Pair(0f, sign(towardBall))
-                }
-            }
-        }
-        return CollisionManifold(nn.first, nn.second, otherRadius)
-    }
-    val penetration = otherRadius - dist
-    if (penetration <= 0f) return null
-    val nx = dx / dist
-    val ny = dy / dist
-    return CollisionManifold(nx, ny, penetration)
-}
-
-private fun manifoldCircleVsCircle(
-    ax: Float,
-    ay: Float,
-    ar: Float,
-    bx: Float,
-    by: Float,
-    br: Float
-): CollisionManifold? {
-    val dx = bx - ax
-    val dy = by - ay
-    val dist = max(EPS, hypot(dx, dy))
-    val minDist = ar + br
-    if (dist >= minDist) return null
-    val overlap = minDist - dist
-    val nx = dx / dist
-    val ny = dy / dist
-    return CollisionManifold(nx, ny, overlap)
-}
-
-/** Approximation: outer semicircles as full circles at arch centers (may overlap slightly early when tops face). */
-private fun manifoldArchVsArch(a: GameShape, b: GameShape): CollisionManifold? {
-    val ca = archCircleCenter(a)
-    val cb = archCircleCenter(b)
-    val ra = archOuterRadius(a)
-    val rb = archOuterRadius(b)
-    return manifoldCircleVsCircle(ca.x, ca.y, ra, cb.x, cb.y, rb)
-}
-
-internal fun computePairCollision(a: GameShape, b: GameShape): CollisionManifold? {
-    val aArch = a.type == ShapeType.ARCH
-    val bArch = b.type == ShapeType.ARCH
-    return when {
-        aArch && bArch -> manifoldArchVsArch(a, b)
-        aArch -> manifoldArchVsCircle(a, b.x, b.y, collisionRadius(b))
-        bArch -> {
-            val m = manifoldArchVsCircle(b, a.x, a.y, collisionRadius(a))
-                ?: return null
-            CollisionManifold(-m.nx, -m.ny, m.overlap)
-        }
-        else -> manifoldCircleVsCircle(
-            a.x,
-            a.y,
-            collisionRadius(a),
-            b.x,
-            b.y,
-            collisionRadius(b)
-        )
-    }
 }
