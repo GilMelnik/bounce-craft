@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -942,6 +943,7 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         tutorialWindowHugRuler = true,
         tutorialLandscapeWindowVerticalPadding = 8.dp,
         tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
+        rulerTutorialExplanationLayout = true,
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
             "Tap outside the window to finish"
@@ -1004,7 +1006,7 @@ private fun RulerExplainSection() {
     val menuIconInk = if (menuSurfaceLum < 0.5f) Color.White else Color.Black
     val menuIconInkDim = menuIconInk.copy(alpha = 0.45f)
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.wrapContentWidth(Alignment.CenterHorizontally),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         ShapeMenuExplainRow(
@@ -1139,7 +1141,8 @@ private fun TutorialInstructionBodyColumn(
     scheme: ColorScheme,
     maxHeight: Dp?,
     belowBodyContent: (@Composable () -> Unit)?,
-    wrapBelowBodyInFillWidthColumn: Boolean
+    wrapBelowBodyInFillWidthColumn: Boolean,
+    useVerticalScroll: Boolean = true
 ) {
     if (body.isBlank() && belowBodyContent == null) return
     val scrollState = rememberScrollState()
@@ -1167,11 +1170,17 @@ private fun TutorialInstructionBodyColumn(
             }
         }
     }
-    val scrollableModifier = modifier
-        .then(if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
-        .verticalScroll(scrollState)
-    Column(modifier = scrollableModifier) {
-        Inner()
+    if (useVerticalScroll) {
+        val scrollableModifier = modifier
+            .then(if (maxHeight != null) Modifier.heightIn(max = maxHeight) else Modifier)
+            .verticalScroll(scrollState)
+        Column(modifier = scrollableModifier) {
+            Inner()
+        }
+    } else {
+        Column(modifier = modifier) {
+            Inner()
+        }
     }
 }
 
@@ -1195,6 +1204,8 @@ private fun TutorialStepLayout(
     tutorialPortraitBodyBottomSpacer: Dp? = null,
     /** Landscape: vertical padding around the mini-window pane (default 18.dp). */
     tutorialLandscapeWindowVerticalPadding: Dp = 18.dp,
+    /** Part 5 only: tighter explanation pane; leftover space passes taps to [onOutsideTap]. */
+    rulerTutorialExplanationLayout: Boolean = false,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
@@ -1248,17 +1259,50 @@ private fun TutorialStepLayout(
                             modifier = Modifier.fillMaxWidth()
                         )
                         Spacer(Modifier.height(16.dp))
-                        TutorialInstructionBodyColumn(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth(),
-                            body = body,
-                            textAlign = TextAlign.Start,
-                            scheme = scheme,
-                            maxHeight = null,
-                            belowBodyContent = belowBodyContent,
-                            wrapBelowBodyInFillWidthColumn = false
-                        )
+                        if (rulerTutorialExplanationLayout && belowBodyContent != null) {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .pointerInput(tutorialWindowBounds) {
+                                            detectTapGestures { tapOffset ->
+                                                val b = tutorialWindowBounds
+                                                if (b == null || !b.contains(tapOffset)) {
+                                                    onOutsideTap()
+                                                }
+                                            }
+                                        }
+                                )
+                                TutorialInstructionBodyColumn(
+                                    modifier = Modifier
+                                        .align(Alignment.TopStart)
+                                        .wrapContentWidth(Alignment.Start),
+                                    body = body,
+                                    textAlign = TextAlign.Start,
+                                    scheme = scheme,
+                                    maxHeight = null,
+                                    belowBodyContent = belowBodyContent,
+                                    wrapBelowBodyInFillWidthColumn = false,
+                                    useVerticalScroll = false
+                                )
+                            }
+                        } else {
+                            TutorialInstructionBodyColumn(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                                body = body,
+                                textAlign = TextAlign.Start,
+                                scheme = scheme,
+                                maxHeight = null,
+                                belowBodyContent = belowBodyContent,
+                                wrapBelowBodyInFillWidthColumn = false
+                            )
+                        }
                         Spacer(Modifier.height(8.dp))
                         TutorialFooter(step = step, hint = footerHint, compact = true)
                         Spacer(Modifier.height(TutorialLandscapeFooterLiftFromPaneBottom))
@@ -1276,6 +1320,7 @@ private fun TutorialStepLayout(
                         windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
                         hugRulerContent = tutorialWindowHugRuler,
                         portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
+                        rulerTutorialExplanationLayout = rulerTutorialExplanationLayout,
                         insideWindowHeader = insideWindowHeader,
                         belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
@@ -1317,6 +1362,7 @@ private fun TutorialStepLayout(
                     windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
                     hugRulerContent = tutorialWindowHugRuler,
                     portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
+                    rulerTutorialExplanationLayout = rulerTutorialExplanationLayout,
                     insideWindowHeader = insideWindowHeader,
                     belowMiniWindowContent = belowMiniWindowContent,
                     content = windowContent
@@ -1420,6 +1466,8 @@ private fun TutorialWindow(
     hugRulerContent: Boolean = false,
     /** Portrait only: place [belowMiniWindowContent] under the card with scroll instead of below a vertically centered card. */
     portraitStackExplanationBelow: Boolean = false,
+    /** Part 5: minimal padding around below-window explanations; area below/around forwards taps to [onOutsideTap]. */
+    rulerTutorialExplanationLayout: Boolean = false,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
@@ -1477,6 +1525,9 @@ private fun TutorialWindow(
         )
 
         if (stackExplainBelow) {
+            val explainHorizontalPad = if (rulerTutorialExplanationLayout) 4.dp else outerMargin
+            val explainTopPad = if (rulerTutorialExplanationLayout) 4.dp else 10.dp
+            val explainBottomPad = if (rulerTutorialExplanationLayout) 4.dp else 6.dp
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1492,16 +1543,46 @@ private fun TutorialWindow(
                     insideWindowHeader = insideWindowHeader,
                     content = content
                 )
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .verticalScroll(explainScrollState)
-                        .padding(horizontal = outerMargin)
-                        .padding(top = 10.dp, bottom = 6.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    belowMiniWindowContent()
+                if (rulerTutorialExplanationLayout) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(onOutsideTap) {
+                                    detectTapGestures { onOutsideTap() }
+                                }
+                        )
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .wrapContentWidth(Alignment.CenterHorizontally)
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .padding(horizontal = explainHorizontalPad)
+                                    .padding(top = explainTopPad, bottom = explainBottomPad),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                belowMiniWindowContent()
+                            }
+                        }
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .verticalScroll(explainScrollState)
+                            .padding(horizontal = explainHorizontalPad)
+                            .padding(top = explainTopPad, bottom = explainBottomPad),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        belowMiniWindowContent()
+                    }
                 }
             }
         } else {
