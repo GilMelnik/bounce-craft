@@ -928,6 +928,7 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
     var tutorialRulerEnabled by rememberSaveable { mutableStateOf(false) }
     var rulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     val scheme = MaterialTheme.colorScheme
+    val showInlineSwitchRow = !isLandscape && !tutorialRulerEnabled
 
     TutorialStepLayout(
         title = "Part 5 - Play ruler",
@@ -944,22 +945,36 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         tutorialLandscapeWindowVerticalPadding = 8.dp,
         tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
         rulerTutorialExplanationLayout = true,
+        portraitOmitMiniWindow = showInlineSwitchRow,
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
             "Tap outside the window to finish"
         } else {
             null
         },
-        insideWindowHeader = {
-            TutorialRulerToggleRow(
-                checked = tutorialRulerEnabled,
-                onCheckedChange = { tutorialRulerEnabled = it }
-            )
-        },
-        belowBodyContent = if (tutorialRulerEnabled && isLandscape) {
-            { RulerExplainSection() }
-        } else {
+        insideWindowHeader = if (showInlineSwitchRow) {
             null
+        } else {
+            {
+                TutorialRulerToggleRow(
+                    checked = tutorialRulerEnabled,
+                    onCheckedChange = { tutorialRulerEnabled = it }
+                )
+            }
+        },
+        belowBodyContent = when {
+            showInlineSwitchRow -> {
+                {
+                    TutorialRulerToggleRow(
+                        checked = tutorialRulerEnabled,
+                        onCheckedChange = { tutorialRulerEnabled = it }
+                    )
+                }
+            }
+            tutorialRulerEnabled && isLandscape -> {
+                { RulerExplainSection() }
+            }
+            else -> null
         },
         belowMiniWindowContent = if (tutorialRulerEnabled && !isLandscape) {
             { RulerExplainSection() }
@@ -1206,6 +1221,8 @@ private fun TutorialStepLayout(
     tutorialLandscapeWindowVerticalPadding: Dp = 18.dp,
     /** Part 5 only: tighter explanation pane; leftover space passes taps to [onOutsideTap]. */
     rulerTutorialExplanationLayout: Boolean = false,
+    /** Portrait only: skip the rounded mini-window entirely. The window slot collapses to a tap-dismissable spacer that fills remaining space. */
+    portraitOmitMiniWindow: Boolean = false,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowBodyContent: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
@@ -1354,19 +1371,30 @@ private fun TutorialStepLayout(
                     Spacer(Modifier.height(tutorialPortraitBodyBottomSpacer ?: 40.dp))
                 }
 
-                TutorialWindow(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    onOutsideTap = onOutsideTap,
-                    windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
-                    hugRulerContent = tutorialWindowHugRuler,
-                    portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
-                    rulerTutorialExplanationLayout = rulerTutorialExplanationLayout,
-                    insideWindowHeader = insideWindowHeader,
-                    belowMiniWindowContent = belowMiniWindowContent,
-                    content = windowContent
-                )
+                if (portraitOmitMiniWindow) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .pointerInput(Unit) {
+                                detectTapGestures { onOutsideTap() }
+                            }
+                    )
+                } else {
+                    TutorialWindow(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        onOutsideTap = onOutsideTap,
+                        windowAspectRatio = tutorialWindowAspectRatio ?: 1.2f,
+                        hugRulerContent = tutorialWindowHugRuler,
+                        portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
+                        rulerTutorialExplanationLayout = rulerTutorialExplanationLayout,
+                        insideWindowHeader = insideWindowHeader,
+                        belowMiniWindowContent = belowMiniWindowContent,
+                        content = windowContent
+                    )
+                }
 
                 Column(
                     modifier = Modifier.pointerInput(Unit) {
