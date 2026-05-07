@@ -202,7 +202,8 @@ private fun CreateShapeTutorialStep(onAdvance: () -> Unit) {
         title = "Part 1 - Create a shape",
         body = "Tap inside the highlighted area to create one shape. Watch it appear!",
         step = 0,
-        onOutsideTap = onAdvance
+        onOutsideTap = onAdvance,
+        footerHint = if (stageCompleted) "Tap outside the window to continue" else null
     ) {
         Box(
             modifier = Modifier
@@ -309,7 +310,8 @@ private fun SizeAndSpeedTutorialStep(onAdvance: () -> Unit) {
         title = "Part 2 - Size and speed",
         body = "Drag to form a shape. Longer drag makes it bigger. Release to launch it!",
         step = 1,
-        onOutsideTap = onAdvance
+        onOutsideTap = onAdvance,
+        footerHint = if (stageCompleted) "Tap outside the window to continue" else null
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -500,7 +502,8 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
         title = "Part 3 - Move and color change",
         body = "Drag the shape to move it. Notice how its color cycles while you hold it!",
         step = 2,
-        onOutsideTap = onAdvance
+        onOutsideTap = onAdvance,
+        footerHint = if (stageCompleted) "Tap outside the window to continue" else null
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
             Box(
@@ -743,7 +746,7 @@ private fun SelectShapeTutorialStep(onFinish: () -> Unit) {
         instructionBodyMaxHeight = TutorialLongInstructionBodyMaxHeight,
         onOutsideTap = onFinish,
         footerHint = if (menuRevealed) {
-            "Tap outside the shape and toolbar to continue"
+            "Tap outside the window to continue"
         } else {
             null
         },
