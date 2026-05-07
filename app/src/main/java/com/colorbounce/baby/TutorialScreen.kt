@@ -959,6 +959,8 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
             "Tap outside the window to finish"
+        } else if (isPortrait) {
+            "Tap anywhere to skip this part"
         } else {
             null
         },
