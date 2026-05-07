@@ -16,6 +16,11 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -75,16 +80,19 @@ fun ShapeContextMenuHueLockButton(
 ) {
     val scheme = MaterialTheme.colorScheme
     val shapeBodyColor = shape.color
-    val lockedVisual = if (rulerHueGloballyLocked) {
+    val modelLockedVisual = if (rulerHueGloballyLocked) {
         !shape.exemptFromGlobalHueLock
     } else {
         shape.freezeHueWhileDragging
     }
-    val emphasized = if (rulerHueGloballyLocked) {
-        shape.exemptFromGlobalHueLock
-    } else {
-        shape.freezeHueWhileDragging
-    }
+
+    // GameShape fields are mutable and not Compose snapshot state, so visual changes can lag
+    // if the menu doesn't recompose immediately. Keep an optimistic local copy that flips
+    // instantly on tap, and sync it back to the latest model value whenever it changes.
+    var lockedVisual by remember(shape.id, rulerHueGloballyLocked) { mutableStateOf(modelLockedVisual) }
+    LaunchedEffect(modelLockedVisual) { lockedVisual = modelLockedVisual }
+
+    val emphasized = if (rulerHueGloballyLocked) !lockedVisual else lockedVisual
     val (openDesc, closedDesc) = if (rulerHueGloballyLocked) {
         "This shape can shift hue while dragging (overrides ruler lock). Tap to follow ruler lock like other shapes." to
             "Hue locked while dragging (same as ruler). Tap to allow only this shape to shift hue when dragged."
@@ -93,7 +101,10 @@ fun ShapeContextMenuHueLockButton(
             "Hue frozen while dragging this shape. Tap to allow hue to shift."
     }
     IconButton(
-        onClick = onClick,
+        onClick = {
+            lockedVisual = !lockedVisual
+            onClick()
+        },
         colors = IconButtonDefaults.iconButtonColors(
             containerColor = if (emphasized) {
                 scheme.primaryContainer.copy(alpha = 0.92f)
