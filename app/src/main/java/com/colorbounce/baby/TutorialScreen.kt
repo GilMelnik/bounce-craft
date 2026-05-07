@@ -928,7 +928,9 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
     var tutorialRulerEnabled by rememberSaveable { mutableStateOf(false) }
     var rulerSession by remember { mutableStateOf(CreationSession.fromSettings(settings)) }
     val scheme = MaterialTheme.colorScheme
-    val showInlineSwitchRow = !isLandscape && !tutorialRulerEnabled
+    val isPortrait = !isLandscape
+    val showInlineSwitchRow = isPortrait
+    val omitMiniWindow = isPortrait && !tutorialRulerEnabled
 
     TutorialStepLayout(
         title = "Part 5 - Play ruler",
@@ -945,22 +947,22 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         tutorialLandscapeWindowVerticalPadding = 8.dp,
         tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
         rulerTutorialExplanationLayout = true,
-        portraitOmitMiniWindow = showInlineSwitchRow,
+        portraitOmitMiniWindow = omitMiniWindow,
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
             "Tap outside the window to finish"
         } else {
             null
         },
-        insideWindowHeader = if (showInlineSwitchRow) {
-            null
-        } else {
+        insideWindowHeader = if (isLandscape) {
             {
                 TutorialRulerToggleRow(
                     checked = tutorialRulerEnabled,
                     onCheckedChange = { tutorialRulerEnabled = it }
                 )
             }
+        } else {
+            null
         },
         belowBodyContent = when {
             showInlineSwitchRow -> {
