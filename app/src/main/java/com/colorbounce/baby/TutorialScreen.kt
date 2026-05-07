@@ -955,6 +955,7 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         tutorialLandscapeWindowVerticalPadding = 8.dp,
         tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
         rulerTutorialExplanationLayout = true,
+        tutorialPortraitBelowMiniWindowTopPadding = if (tutorialRulerEnabled && isPortrait) 40.dp else null,
         portraitOmitMiniWindow = omitMiniWindow,
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
@@ -1233,6 +1234,8 @@ private fun TutorialStepLayout(
     tutorialLandscapeWindowVerticalPadding: Dp = 18.dp,
     /** Part 5 only: tighter explanation pane; leftover space passes taps to [onOutsideTap]. */
     rulerTutorialExplanationLayout: Boolean = false,
+    /** Portrait + stacked explanations: extra gap between window and explanations. */
+    tutorialPortraitBelowMiniWindowTopPadding: Dp? = null,
     /** Portrait only: skip the rounded mini-window entirely. The window slot collapses to a tap-dismissable spacer that fills remaining space. */
     portraitOmitMiniWindow: Boolean = false,
     insideWindowHeader: (@Composable () -> Unit)? = null,
@@ -1350,6 +1353,7 @@ private fun TutorialStepLayout(
                         hugRulerContent = tutorialWindowHugRuler,
                         portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
                         rulerTutorialExplanationLayout = rulerTutorialExplanationLayout,
+                        portraitBelowMiniWindowTopPadding = tutorialPortraitBelowMiniWindowTopPadding,
                         insideWindowHeader = insideWindowHeader,
                         belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
@@ -1402,6 +1406,7 @@ private fun TutorialStepLayout(
                         hugRulerContent = tutorialWindowHugRuler,
                         portraitStackExplanationBelow = tutorialPortraitStackExplainBelow,
                         rulerTutorialExplanationLayout = rulerTutorialExplanationLayout,
+                        portraitBelowMiniWindowTopPadding = tutorialPortraitBelowMiniWindowTopPadding,
                         insideWindowHeader = insideWindowHeader,
                         belowMiniWindowContent = belowMiniWindowContent,
                         content = windowContent
@@ -1508,6 +1513,8 @@ private fun TutorialWindow(
     portraitStackExplanationBelow: Boolean = false,
     /** Part 5: minimal padding around below-window explanations; area below/around forwards taps to [onOutsideTap]. */
     rulerTutorialExplanationLayout: Boolean = false,
+    /** Portrait + stacked explanations: extra gap between window and explanations. */
+    portraitBelowMiniWindowTopPadding: Dp? = null,
     insideWindowHeader: (@Composable () -> Unit)? = null,
     belowMiniWindowContent: (@Composable () -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit
@@ -1566,7 +1573,8 @@ private fun TutorialWindow(
 
         if (stackExplainBelow) {
             val explainHorizontalPad = if (rulerTutorialExplanationLayout) 4.dp else outerMargin
-            val explainTopPad = if (rulerTutorialExplanationLayout) 4.dp else 10.dp
+            val explainTopPad = portraitBelowMiniWindowTopPadding
+                ?: if (rulerTutorialExplanationLayout) 4.dp else 10.dp
             val explainBottomPad = if (rulerTutorialExplanationLayout) 4.dp else 6.dp
             Column(
                 modifier = Modifier
