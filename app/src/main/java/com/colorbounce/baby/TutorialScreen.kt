@@ -953,9 +953,9 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
         tutorialLandscapeWindowPaneWeight = 0.48f,
         tutorialWindowHugRuler = true,
         tutorialLandscapeWindowVerticalPadding = 8.dp,
-        tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled) 16.dp else null,
+        tutorialPortraitBodyBottomSpacer = if (tutorialRulerEnabled && isPortrait) 8.dp else null,
         rulerTutorialExplanationLayout = true,
-        tutorialPortraitBelowMiniWindowTopPadding = if (tutorialRulerEnabled && isPortrait) 40.dp else null,
+        tutorialPortraitBelowMiniWindowTopPadding = if (tutorialRulerEnabled && isPortrait) 25.dp else null,
         portraitOmitMiniWindow = omitMiniWindow,
         onOutsideTap = onFinish,
         footerHint = if (tutorialRulerEnabled) {
