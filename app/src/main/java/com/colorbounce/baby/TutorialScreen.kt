@@ -934,7 +934,7 @@ private fun RulerTutorialStep(onFinish: () -> Unit) {
 
     TutorialStepLayout(
         title = "Part 5 - Play ruler",
-        body = if (tutorialRulerEnabled) {
+        body = if (tutorialRulerEnabled && isLandscape) {
             ""
         } else {
             "Turn on the switch (same as in Settings). The ruler appears in the window for this step only."
