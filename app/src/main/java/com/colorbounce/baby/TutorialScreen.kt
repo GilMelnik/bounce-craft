@@ -419,6 +419,7 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
     var colorShifted by remember { mutableStateOf(false) }
     var stageCompleted by remember { mutableStateOf(false) }
     var userGrabbedShape by remember { mutableStateOf(false) }
+    var dragDistanceSum by remember { mutableStateOf(0f) }
 
     val latestShapes by rememberUpdatedState(shapes)
     val latestStageCompleted by rememberUpdatedState(stageCompleted)
@@ -473,27 +474,25 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
         }
     }
 
-    LaunchedEffect(shapes, initialCenter) {
+    LaunchedEffect(shapes) {
         val shape = shapes.firstOrNull() ?: return@LaunchedEffect
         if (trackedShapeId == null) {
             trackedShapeId = shape.id
             initialHue = shape.hue
         }
+    }
 
-        val trackedId = trackedShapeId ?: return@LaunchedEffect
-        val tracked = shapes.firstOrNull { it.id == trackedId } ?: return@LaunchedEffect
-        val start = initialCenter ?: return@LaunchedEffect
-
-        if ((Offset(tracked.x, tracked.y) - start).getDistance() > 60f) {
-            movedEnough = true
+    LaunchedEffect(userGrabbedShape) {
+        if (userGrabbedShape && !colorShifted) {
+            delay(350)
+            if (userGrabbedShape) {
+                colorShifted = true
+            }
         }
+    }
 
-        val hueStart = initialHue
-        if (hueStart != null && hueDistance(hueStart, tracked.hue) > 15f) {
-            colorShifted = true
-        }
-
-        if (movedEnough && colorShifted) {
+    LaunchedEffect(movedEnough, colorShifted) {
+        if (!stageCompleted && movedEnough && colorShifted) {
             stageCompleted = true
         }
     }
@@ -547,6 +546,12 @@ private fun MoveShapeTutorialStep(onAdvance: () -> Unit) {
                                     change.pressed && change.previousPressed -> {
                                         if (activePointerId == pointerId) {
                                             val dragAmount = change.position - change.previousPosition
+                                            if (!latestStageCompleted) {
+                                                dragDistanceSum += dragAmount.getDistance()
+                                                if (dragDistanceSum > 25f) {
+                                                    movedEnough = true
+                                                }
+                                            }
                                             viewModel.onDrag(
                                                 point = change.position,
                                                 dragAmount = dragAmount,
