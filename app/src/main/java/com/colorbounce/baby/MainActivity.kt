@@ -263,6 +263,13 @@ private fun ColorBounceApp(
     onApplyWindowMode: (Boolean) -> Unit,
     onBestEffortDisableNotifications: () -> Unit
 ) {
+    val activity = LocalContext.current as ComponentActivity
+    val donationBillingManager = remember(activity) { DonationBillingManager(activity) }
+    DisposableEffect(donationBillingManager) {
+        donationBillingManager.start()
+        onDispose { donationBillingManager.destroy() }
+    }
+
     val currentBackstack by navController.currentBackStackEntryFlow.collectAsState(initial = null)
     val route = currentBackstack?.destination?.route ?: "menu"
     val inGame = route == "game"
@@ -308,6 +315,19 @@ private fun ColorBounceApp(
                     Log.d(TAG, "Tutorial replay requested")
                     tutorialExitTarget = "menu"
                     navController.navigate("tutorial")
+                },
+                onSupport = {
+                    Log.d(TAG, "Navigating to donation screen")
+                    navController.navigate("donation")
+                }
+            )
+        }
+        composable("donation") {
+            DonationScreen(
+                billingManager = donationBillingManager,
+                onBack = {
+                    Log.d(TAG, "Navigating back from donation")
+                    navController.popBackStack()
                 }
             )
         }
@@ -326,6 +346,10 @@ private fun ColorBounceApp(
                 onBack = {
                     Log.d(TAG, "Navigating back from about")
                     navController.popBackStack()
+                },
+                onSupport = {
+                    Log.d(TAG, "Navigating to donation from about")
+                    navController.navigate("donation")
                 }
             )
         }
@@ -367,9 +391,9 @@ private fun MainMenuScreen(
     onPlay: () -> Unit,
     onSettings: () -> Unit,
     onAbout: () -> Unit,
-    onTutorial: () -> Unit
+    onTutorial: () -> Unit,
+    onSupport: () -> Unit
 ) {
-    val context = LocalContext.current
     val systemBarsPadding = WindowInsets.systemBars.asPaddingValues()
 
     // Surface sets LocalContentColor to onBackground for default text (light + dark).
@@ -461,13 +485,7 @@ private fun MainMenuScreen(
                     color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
                     modifier = Modifier
                         .padding(bottom = 32.dp)
-                        .clickable {
-                            val intent = Intent(
-                                Intent.ACTION_VIEW,
-                                "https://buymeacoffee.com/gilmelnik".toUri()
-                            )
-                            context.startActivity(intent)
-                        }
+                        .clickable(onClick = onSupport)
                 )
             }
         }
@@ -475,7 +493,7 @@ private fun MainMenuScreen(
 }
 
 @Composable
-private fun AboutScreen(onBack: () -> Unit) {
+private fun AboutScreen(onBack: () -> Unit, onSupport: () -> Unit) {
     val context = LocalContext.current
     val scheme = MaterialTheme.colorScheme
     val onSurfaceVariant = scheme.onSurfaceVariant
@@ -589,7 +607,7 @@ private fun AboutScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(
-                    onClick = { openUrl("https://buymeacoffee.com/gilmelnik") },
+                    onClick = onSupport,
                     modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
