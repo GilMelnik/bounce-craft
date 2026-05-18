@@ -1,6 +1,6 @@
 # Privacy Policy for Bounce Craft
 
-**Last Updated: March 23, 2026**
+**Last Updated: May 18, 2026**
 
 ## 1. Introduction
 Welcome to **Bounce Craft**. We are committed to protecting the privacy of all our users, especially children. This Privacy Policy explains how we handle information when you use our mobile application.
@@ -23,11 +23,11 @@ Since Bounce Craft is distributed through the Google Play Store, Google may auto
 
 This data is collected by Google to help improve the stability and performance of the Android ecosystem. For more information, please refer to [Google’s Privacy Policy](https://policies.google.com/privacy).
 
-## 3. External Links and Third-Party Services
-Bounce Craft contains a link to a third-party service (**Buy Me a Coffee**) to allow users to support the developer. 
-
-* **Data Collection by Third Parties:** If you click on this link, you will be directed to a third-party website. We do not control and are not responsible for the privacy practices of third-party sites. They have their own privacy policies and may collect personal information (such as payment details) if you choose to interact with them.
-* **Parental Guidance:** We encourage parents to supervise their children's use of the app and to be aware when they are leaving the app to visit an external site. For an optimal child-safe experience, we recommend that parents handle any external interactions.
+### 3. In-App Purchases and Third-Party Billing
+Bounce Craft offers in-app purchases through Google Play Billing to allow users to support the developer.
+* **Payment Processing:** All transactions are processed securely by Google Play. We do not collect, store, or have access to your financial information, credit card numbers, or billing details.
+* **Data Collection:** Google Play may collect transaction history and device identifiers associated with your Google account to process the purchase and manage your digital receipts. For more information, please see [Google’s Privacy Policy](https://policies.google.com/privacy).
+* **Parental Controls and Guidance:** Since this app is designed to be safe for children, we highly recommend that parents configure Google Play's authentication settings to require a password or fingerprint for every purchase, preventing accidental or unauthorized charges by children.
 
 ## 4. Use of Permissions
 Bounce Craft requests the following permission:
