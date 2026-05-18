@@ -127,6 +127,9 @@ private const val TAG = "MainActivity"
 class MainActivity : ComponentActivity() {
     private lateinit var settingsRepository: SettingsRepository
     private val gameViewModel: GameViewModel by viewModels()
+    private val mainViewModel: MainViewModel by viewModels {
+        MainViewModelFactory(settingsRepository)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         try {
@@ -134,9 +137,13 @@ class MainActivity : ComponentActivity() {
             Log.d(TAG, "onCreate called")
             settingsRepository = SettingsRepository(this)
             enableEdgeToEdge()
+            // Menu must not start fullscreen (manifest no longer sets it); game toggles immersive later.
+            applyWindowMode(inGame = false, settings = AppSettings())
+            // Eagerly subscribe to DataStore before the first frame (see MainViewModel).
+            mainViewModel.settings.value
 
             setContent {
-                val settings by settingsRepository.settingsFlow.collectAsStateWithLifecycle(AppSettings())
+                val settings by mainViewModel.settings.collectAsStateWithLifecycle()
                 ColorBounceTheme(themeMode = settings.themeMode) {
                     val navController = rememberNavController()
                     ColorBounceApp(
