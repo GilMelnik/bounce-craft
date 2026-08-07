@@ -46,6 +46,7 @@ class DonationBillingManager(
         .enablePendingPurchases(
             PendingPurchasesParams.newBuilder().enableOneTimeProducts().build()
         )
+        .enableAutoServiceReconnection()
         .build()
 
     fun start() {
@@ -62,7 +63,7 @@ class DonationBillingManager(
                     _state.update {
                         it.copy(
                             billingReady = false,
-                            errorMessage = "Billing is unavailable right now."
+                            errorMessage = billingErrorMessage(result)
                         )
                     }
                 }
@@ -114,7 +115,7 @@ class DonationBillingManager(
             _state.update {
                 it.copy(
                     purchasingTier = null,
-                    errorMessage = billingErrorMessage(result.responseCode)
+                    errorMessage = billingErrorMessage(result)
                 )
             }
         }
@@ -136,7 +137,7 @@ class DonationBillingManager(
                 _state.update {
                     it.copy(
                         purchasingTier = null,
-                        errorMessage = billingErrorMessage(result.responseCode)
+                        errorMessage = billingErrorMessage(result)
                     )
                 }
             }
@@ -160,10 +161,10 @@ class DonationBillingManager(
         val params = QueryProductDetailsParams.newBuilder()
             .setProductList(productList)
             .build()
-        billingClient.queryProductDetailsAsync(params) { result, productDetailsList ->
+        billingClient.queryProductDetailsAsync(params) { result, queryResult ->
             scope.launch {
                 if (result.responseCode == BillingClient.BillingResponseCode.OK) {
-                    val map = productDetailsList.orEmpty().associateBy { it.productId }
+                    val map = queryResult.productDetailsList.associateBy { it.productId }
                     _state.update {
                         it.copy(
                             billingReady = true,
@@ -231,13 +232,20 @@ class DonationBillingManager(
         }
     }
 
-    private fun billingErrorMessage(code: Int): String = when (code) {
-        BillingClient.BillingResponseCode.BILLING_UNAVAILABLE ->
-            "Google Play billing is not available on this device."
+    private fun billingErrorMessage(result: BillingResult): String = when (result.responseCode) {
+        BillingClient.BillingResponseCode.BILLING_UNAVAILABLE -> {
+            if (result.debugMessage.contains("Play Store is blocked", ignoreCase = true)) {
+                "Google Play Store is blocked on this device (check parental controls or system restrictions)."
+            } else {
+                "Google Play billing is not available on this device."
+            }
+        }
         BillingClient.BillingResponseCode.ITEM_UNAVAILABLE ->
             "This donation option is not available in your region or account."
         BillingClient.BillingResponseCode.SERVICE_DISCONNECTED ->
             "Lost connection to Google Play. Please try again."
+        BillingClient.BillingResponseCode.NETWORK_ERROR ->
+            "Network error occurred. Please check your connection and try again."
         else -> "Purchase could not be completed. Please try again."
     }
 }

@@ -12,7 +12,7 @@ android {
         applicationId = "com.colorbounce.baby"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
+        versionCode = 17
         versionName = "3.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -78,7 +78,7 @@ dependencies {
     implementation("com.google.android.material:material:1.13.0")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("com.android.billingclient:billing:7.1.1")
+    implementation("com.android.billingclient:billing:9.1.0")
 
     androidTestImplementation(composeBom)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
